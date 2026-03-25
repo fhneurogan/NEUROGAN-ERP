@@ -1,0 +1,539 @@
+import { useQuery } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Beaker,
+  Truck,
+  Clock,
+  ArrowRight,
+  TrendingUp,
+  AlertTriangle as AlertTriangleIcon,
+} from "lucide-react";
+import { formatQty } from "@/lib/formatQty";
+import { Link, useLocation } from "wouter";
+
+// ─── Types ───────────────────────────────────────────
+
+interface ActiveBatchDetail {
+  id: string;
+  batchNumber: string;
+  productName: string;
+  productSku: string;
+  status: string;
+  plannedQuantity: string;
+  outputUom: string;
+  startedAt: string | null;
+  createdAt: string;
+}
+
+interface OpenPODetail {
+  id: string;
+  poNumber: string;
+  supplierName: string;
+  status: string;
+  expectedDeliveryDate: string | null;
+  materials: { name: string; sku: string; qtyOrdered: number; qtyReceived: number; uom: string }[];
+  totalOrdered: number;
+  totalReceived: number;
+}
+
+interface LowStockItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  category: string;
+  defaultUom: string;
+  totalQuantity: number;
+  threshold: number;
+}
+
+interface TransactionWithDetails {
+  id: string;
+  lotId: string;
+  locationId: string;
+  type: string;
+  quantity: string;
+  uom: string;
+  productionBatchId: string | null;
+  notes: string | null;
+  performedBy: string | null;
+  createdAt: string;
+  productName: string;
+  lotNumber: string;
+  locationName: string;
+}
+
+interface DashboardStats {
+  activeBatches: ActiveBatchDetail[];
+  openPOs: OpenPODetail[];
+  lowStockItems: LowStockItem[];
+  recentTransactions: TransactionWithDetails[];
+}
+
+interface BottleneckMaterial {
+  materialId: string;
+  materialName: string;
+  materialSku: string;
+  productCount: number;
+  inStock: number;
+  uom: string;
+}
+
+interface LowestCapacityProduct {
+  productId: string;
+  productName: string;
+  productSku: string;
+  totalPotential: number;
+  bottleneckMaterial: string | null;
+}
+
+interface DashboardSupplyChain {
+  topBottleneckMaterials: BottleneckMaterial[];
+  lowestCapacityProducts: LowestCapacityProduct[];
+}
+
+// ─── Helpers ─────────────────────────────────────────
+
+function timeAgo(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  if (diffMs < 0) return "just now";
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function batchStatusBadge(status: string) {
+  switch (status) {
+    case "IN_PROGRESS":
+      return <Badge className="bg-blue-500/20 text-blue-300 border-0 text-xs">In Progress</Badge>;
+    case "ON_HOLD":
+      return <Badge className="bg-amber-500/20 text-amber-300 border-0 text-xs">On Hold</Badge>;
+    case "DRAFT":
+      return <Badge className="bg-neutral-500/20 text-neutral-400 border-0 text-xs">Draft</Badge>;
+    default:
+      return <Badge variant="secondary" className="text-xs">{status}</Badge>;
+  }
+}
+
+function poStatusBadge(status: string) {
+  switch (status) {
+    case "SUBMITTED":
+      return <Badge className="bg-blue-500/20 text-blue-300 border-0 text-xs">Submitted</Badge>;
+    case "PARTIALLY_RECEIVED":
+      return <Badge className="bg-amber-500/20 text-amber-300 border-0 text-xs">Partial</Badge>;
+    case "DRAFT":
+      return <Badge className="bg-neutral-500/20 text-neutral-400 border-0 text-xs">Draft</Badge>;
+    default:
+      return <Badge variant="secondary" className="text-xs">{status}</Badge>;
+  }
+}
+
+function typeBadge(type: string) {
+  switch (type) {
+    case "PO_RECEIPT":
+      return <Badge className="bg-emerald-500/20 text-emerald-300 border-0 text-xs">PO Receipt</Badge>;
+    case "PRODUCTION_CONSUMPTION":
+      return <Badge className="bg-amber-500/20 text-amber-300 border-0 text-xs">Production</Badge>;
+    case "PRODUCTION_OUTPUT":
+      return <Badge className="bg-purple-500/20 text-purple-300 border-0 text-xs">Output</Badge>;
+    case "COUNT_ADJUSTMENT":
+      return <Badge className="bg-blue-500/20 text-blue-300 border-0 text-xs">Adjustment</Badge>;
+    default:
+      return <Badge variant="secondary" className="text-xs">{type}</Badge>;
+  }
+}
+
+// ─── Glow animation style ────────────────────────────
+
+const pulseGlowStyle = `
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+  50% { box-shadow: 0 0 15px 2px hsl(var(--primary) / 0.15); }
+}
+`;
+
+// ─── Loading skeleton ────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="p-6 space-y-6">
+      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+            <CardContent><Skeleton className="h-32 w-full" /></CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard ───────────────────────────────────────
+
+export default function Dashboard() {
+  const [, setLocation] = useLocation();
+  const { data, isLoading } = useQuery<DashboardStats>({
+    queryKey: ["/api/dashboard"],
+  });
+
+  const { data: supplyChainData } = useQuery<DashboardSupplyChain>({
+    queryKey: ["/api/dashboard/supply-chain"],
+  });
+
+  if (isLoading) return <DashboardSkeleton />;
+  if (!data) return null;
+
+  const hasActiveBatches = data.activeBatches.length > 0;
+  const hasOpenPOs = data.openPOs.length > 0;
+  const hasInProgress = data.activeBatches.some(b => b.status === "IN_PROGRESS");
+  const bottleneckCount = supplyChainData?.topBottleneckMaterials.length ?? 0;
+  const hasBottlenecks = bottleneckCount > 0;
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Inject glow keyframe animation */}
+      <style>{pulseGlowStyle}</style>
+
+      <h1 className="text-xl font-semibold" data-testid="text-page-title">Dashboard</h1>
+
+      {/* Summary strip */}
+      <div className="flex flex-wrap gap-3">
+        <Link href="/production">
+          <div className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50 transition-colors" data-testid="summary-batches">
+            <Beaker className={`h-4 w-4 ${hasActiveBatches ? "text-blue-400" : "text-muted-foreground"}`} />
+            <span className="text-muted-foreground">Active Batches</span>
+            <span className="font-semibold">{data.activeBatches.length}</span>
+          </div>
+        </Link>
+        <Link href="/suppliers">
+          <div className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50 transition-colors" data-testid="summary-pos">
+            <Truck className={`h-4 w-4 ${hasOpenPOs ? "text-blue-400" : "text-muted-foreground"}`} />
+            <span className="text-muted-foreground">Open POs</span>
+            <span className="font-semibold">{data.openPOs.length}</span>
+          </div>
+        </Link>
+        <Link href="/supply-chain">
+          <div className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50 transition-colors" data-testid="summary-supply-chain">
+            <TrendingUp className={`h-4 w-4 ${hasBottlenecks ? "text-amber-400" : "text-muted-foreground"}`} />
+            <span className="text-muted-foreground">Bottlenecks</span>
+            <span className={`font-semibold ${hasBottlenecks ? "text-amber-400" : ""}`}>{bottleneckCount}</span>
+          </div>
+        </Link>
+      </div>
+
+      {/* Top row: Production Batches + Open POs */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Active Production Batches */}
+        <Card
+          data-testid="card-active-batches"
+          className={hasInProgress ? "border-primary/30" : ""}
+          style={hasInProgress ? { animation: "pulse-glow 3s ease-in-out infinite" } : undefined}
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Beaker className="h-4 w-4 text-blue-400" />
+                Active Production Batches
+                {hasInProgress && (
+                  <Badge
+                    className="bg-emerald-500/20 text-emerald-400 border-0 text-[10px] px-1.5 py-0 h-4 ml-1 gap-1"
+                    data-testid="badge-live"
+                  >
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                    </span>
+                    LIVE
+                  </Badge>
+                )}
+              </CardTitle>
+              <Link href="/production">
+                <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1">
+                  View all <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!hasActiveBatches ? (
+              <p className="text-sm text-muted-foreground px-6 pb-4">No active production batches.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Batch</TableHead>
+                    <TableHead className="text-xs">Product</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Qty</TableHead>
+                    <TableHead className="text-xs">
+                      <Clock className="h-3 w-3 inline mr-1" />Started
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.activeBatches.map((batch) => (
+                    <TableRow
+                      key={batch.id}
+                      className={`cursor-pointer hover:bg-muted/50 ${batch.status === "IN_PROGRESS" ? "border-l-2 border-l-primary" : ""}`}
+                      onClick={() => setLocation("/production")}
+                      data-testid={`row-batch-${batch.id}`}
+                    >
+                      <TableCell className="text-sm font-mono font-medium">{batch.batchNumber}</TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="text-xs font-medium truncate max-w-[160px]">{batch.productName}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{batch.productSku}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{batchStatusBadge(batch.status)}</TableCell>
+                      <TableCell className="text-xs tabular-nums">{formatQty(parseFloat(batch.plannedQuantity))} {batch.outputUom}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{timeAgo(batch.startedAt ?? batch.createdAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Open Purchase Orders */}
+        <Card data-testid="card-open-pos">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Truck className="h-4 w-4 text-blue-400" />
+                Open Purchase Orders
+              </CardTitle>
+              <Link href="/suppliers">
+                <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1">
+                  View all <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!hasOpenPOs ? (
+              <p className="text-sm text-muted-foreground px-6 pb-4">No open purchase orders.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {data.openPOs.map((po) => {
+                  const pct = po.totalOrdered > 0 ? (po.totalReceived / po.totalOrdered) * 100 : 0;
+                  return (
+                    <div
+                      key={po.id}
+                      className="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => setLocation("/suppliers")}
+                      data-testid={`row-po-${po.id}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono font-medium">{po.poNumber}</span>
+                          {poStatusBadge(po.status)}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {po.expectedDeliveryDate
+                            ? `ETA: ${new Date(po.expectedDeliveryDate).toLocaleDateString()}`
+                            : "No ETA"}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mb-1.5">{po.supplierName}</div>
+                      <div className="space-y-1 mb-2">
+                        {po.materials.map((mat, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className="truncate max-w-[200px]">{mat.name}</span>
+                            <span className="tabular-nums text-muted-foreground">
+                              {formatQty(mat.qtyReceived)} / {formatQty(mat.qtyOrdered)} {mat.uom}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress value={pct} className="h-1.5 flex-1" />
+                        <span className="text-xs tabular-nums text-muted-foreground w-8 text-right">{Math.round(pct)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Bottom row: Supply Chain + Recent Transactions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* Supply Chain Bottlenecks */}
+        <Card data-testid="card-supply-chain" className="flex flex-col">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <TrendingUp className={`h-4 w-4 ${hasBottlenecks ? "text-amber-400" : "text-muted-foreground"}`} />
+                Supply Chain
+                {hasBottlenecks && (
+                  <Badge className="bg-amber-500/20 text-amber-300 border-0 text-xs ml-1">
+                    {bottleneckCount}
+                  </Badge>
+                )}
+              </CardTitle>
+              <Link href="/supply-chain">
+                <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1">
+                  View all <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 flex-1 relative min-h-0">
+            {!supplyChainData || (!hasBottlenecks && supplyChainData.lowestCapacityProducts.length === 0) ? (
+              <div className="flex flex-col items-center justify-center py-6 text-center px-6">
+                <TrendingUp className="h-8 w-8 text-emerald-400 mb-2" />
+                <p className="text-sm font-medium text-emerald-400">No bottlenecks detected</p>
+                <p className="text-xs text-muted-foreground mt-1">All products have capacity</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {/* Section A: Top Bottleneck Materials */}
+                {supplyChainData.topBottleneckMaterials.length > 0 && (
+                  <div className="px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Top Bottlenecks</p>
+                    <div className="space-y-2">
+                      {supplyChainData.topBottleneckMaterials.map((mat) => {
+                        const isZeroStock = mat.inStock === 0;
+                        return (
+                          <Link key={mat.materialId} href="/supply-chain">
+                            <div
+                              className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-muted/50 rounded-sm px-1 -mx-1 transition-colors"
+                              data-testid={`bottleneck-${mat.materialId}`}
+                            >
+                              <div className="min-w-0 flex-1 mr-3">
+                                <p className="text-sm font-medium truncate">{mat.materialName}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] font-mono text-muted-foreground">{mat.materialSku}</span>
+                                  <span className={`text-[10px] ${isZeroStock ? "text-amber-400" : "text-muted-foreground"}`}>
+                                    {isZeroStock && <AlertTriangleIcon className="h-2.5 w-2.5 inline mr-0.5" />}
+                                    {formatQty(mat.inStock)} {mat.uom} in stock
+                                  </span>
+                                </div>
+                              </div>
+                              <Badge className={`border-0 text-xs shrink-0 ${isZeroStock ? "bg-amber-500/20 text-amber-300" : "bg-neutral-500/20 text-neutral-400"}`}>
+                                Limits {mat.productCount} product{mat.productCount !== 1 ? "s" : ""}
+                              </Badge>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section B: Lowest Capacity Products */}
+                {supplyChainData.lowestCapacityProducts.length > 0 && (
+                  <div className="px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Lowest Capacity</p>
+                    <div className="space-y-2">
+                      {supplyChainData.lowestCapacityProducts.map((prod) => (
+                        <Link key={prod.productId} href={`/supply-chain?product=${prod.productId}`}>
+                          <div
+                            className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-muted/50 rounded-sm px-1 -mx-1 transition-colors"
+                            data-testid={`low-capacity-${prod.productId}`}
+                          >
+                            <div className="min-w-0 flex-1 mr-3">
+                              <p className="text-sm font-medium truncate">{prod.productName}</p>
+                              <span className="text-[10px] font-mono text-muted-foreground">{prod.productSku}</span>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-mono font-bold tabular-nums">{formatQty(prod.totalPotential)}</p>
+                              {prod.bottleneckMaterial && (
+                                <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                                  Limited by {prod.bottleneckMaterial}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Transactions */}
+        <Card data-testid="card-recent-transactions">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold">Recent Transactions</CardTitle>
+              <Link href="/transactions">
+                <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1">
+                  View all <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {data.recentTransactions.length === 0 ? (
+              <p className="text-sm text-muted-foreground px-6 pb-4">No transactions yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Date</TableHead>
+                    <TableHead className="text-xs">Type</TableHead>
+                    <TableHead className="text-xs">Material</TableHead>
+                    <TableHead className="text-xs">Lot</TableHead>
+                    <TableHead className="text-xs text-right">Qty</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.recentTransactions.map((tx) => {
+                    const qty = parseFloat(tx.quantity);
+                    // Navigate to transactions tab on click
+                    return (
+                      <TableRow
+                        key={tx.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => window.location.hash = "#/transactions"}
+                        data-testid={`row-transaction-${tx.id}`}
+                      >
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {new Date(tx.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>{typeBadge(tx.type)}</TableCell>
+                        <TableCell className="text-xs truncate max-w-[120px]">{tx.productName}</TableCell>
+                        <TableCell className="text-xs font-mono whitespace-nowrap">{tx.lotNumber}</TableCell>
+                        <TableCell className={`text-xs text-right font-mono whitespace-nowrap ${qty > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {qty > 0 ? "+" : ""}{formatQty(qty)} {tx.uom}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
