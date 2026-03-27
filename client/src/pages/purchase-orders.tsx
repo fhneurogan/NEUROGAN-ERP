@@ -143,7 +143,14 @@ function DetailPanel({
             <h2 className="text-lg font-semibold font-mono">{po.poNumber}</h2>
             {statusBadge(po.status)}
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">{po.supplierName}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            <span
+              className="cursor-pointer hover:underline text-primary"
+              onClick={() => { window.location.hash = `#/suppliers?supplier=${po.supplierId}`; }}
+            >
+              {po.supplierName}
+            </span>
+          </p>
         </div>
         <div className="flex gap-2 shrink-0">
           {po.status === "DRAFT" && (
@@ -263,7 +270,14 @@ function DetailPanel({
                     return (
                       <TableRow key={li.id} data-testid={`row-line-item-${li.id}`}>
                         <TableCell>
-                          <div className="text-sm font-medium">{li.productName}</div>
+                          <div className="text-sm font-medium">
+                            <span
+                              className="cursor-pointer hover:underline text-primary"
+                              onClick={(e) => { e.stopPropagation(); window.location.hash = `#/inventory?material=${li.productId}`; }}
+                            >
+                              {li.productName}
+                            </span>
+                          </div>
                           <div className="text-xs font-mono text-muted-foreground">{li.productSku}</div>
                         </TableCell>
                         <TableCell className="text-sm text-right tabular-nums font-medium">
@@ -1363,8 +1377,8 @@ function ReceiveSheet({
 
 // ── Main Page ──
 
-export default function PurchaseOrders() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export default function PurchaseOrders({ initialSelectedId }: { initialSelectedId?: string | null }) {
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [statusFilter, setStatusFilter] = useState("");
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [receiveSheetOpen, setReceiveSheetOpen] = useState(false);

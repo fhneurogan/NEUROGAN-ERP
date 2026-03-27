@@ -294,7 +294,7 @@ export default function Dashboard() {
                     <TableRow
                       key={batch.id}
                       className={`cursor-pointer hover:bg-muted/50 ${batch.status === "IN_PROGRESS" ? "border-l-2 border-l-primary" : ""}`}
-                      onClick={() => setLocation("/production")}
+                      onClick={() => { window.location.hash = `#/production?batch=${batch.id}`; }}
                       data-testid={`row-batch-${batch.id}`}
                     >
                       <TableCell className="text-sm font-mono font-medium">{batch.batchNumber}</TableCell>
@@ -341,7 +341,7 @@ export default function Dashboard() {
                     <div
                       key={po.id}
                       className="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => setLocation("/suppliers")}
+                      onClick={() => { window.location.hash = `#/suppliers?po=${po.id}`; }}
                       data-testid={`row-po-${po.id}`}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -419,7 +419,7 @@ export default function Dashboard() {
                       {supplyChainData.topBottleneckMaterials.map((mat) => {
                         const isZeroStock = mat.inStock === 0;
                         return (
-                          <Link key={mat.materialId} href="/supply-chain">
+                          <Link key={mat.materialId} href={`/inventory?material=${mat.materialId}`}>
                             <div
                               className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-muted/50 rounded-sm px-1 -mx-1 transition-colors"
                               data-testid={`bottleneck-${mat.materialId}`}

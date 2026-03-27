@@ -913,9 +913,9 @@ function SupplierDetail({
 
 // ─── Suppliers Sub-Tab ──────────────────────────────────────
 
-function SuppliersContent() {
+function SuppliersContent({ initialSelectedId }: { initialSelectedId?: string | null }) {
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
@@ -1084,7 +1084,14 @@ function SuppliersContent() {
 type SubTab = "purchase-orders" | "suppliers";
 
 export default function SuppliersTab() {
-  const [activeTab, setActiveTab] = useState<SubTab>("purchase-orders");
+  // Read URL params for pre-selection (hash routing: /#/suppliers?po=xxx or ?supplier=xxx)
+  const searchParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const urlPoId = searchParams.get("po");
+  const urlSupplierId = searchParams.get("supplier");
+
+  const [activeTab, setActiveTab] = useState<SubTab>(
+    urlSupplierId ? "suppliers" : "purchase-orders"
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -1123,8 +1130,8 @@ export default function SuppliersTab() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === "purchase-orders" && <PurchaseOrders />}
-        {activeTab === "suppliers" && <SuppliersContent />}
+        {activeTab === "purchase-orders" && <PurchaseOrders initialSelectedId={urlPoId} />}
+        {activeTab === "suppliers" && <SuppliersContent initialSelectedId={urlSupplierId} />}
       </div>
     </div>
   );

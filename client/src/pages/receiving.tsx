@@ -482,7 +482,17 @@ function ReceivingDetail({
           </div>
           <div>
             <span className="text-muted-foreground">Supplier:</span>{" "}
-            <span data-testid="text-detail-supplier">{record.supplierName ?? "—"}</span>
+            {record.supplierId && record.supplierName ? (
+              <span
+                className="cursor-pointer hover:underline text-primary"
+                onClick={() => { window.location.hash = `#/suppliers?supplier=${record.supplierId}`; }}
+                data-testid="text-detail-supplier"
+              >
+                {record.supplierName}
+              </span>
+            ) : (
+              <span data-testid="text-detail-supplier">{record.supplierName ?? "—"}</span>
+            )}
           </div>
           <div>
             <span className="text-muted-foreground">Supplier Lot #:</span>{" "}
@@ -729,7 +739,11 @@ function ReceivingDetail({
 // ── Main page ──
 
 export default function Receiving() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Read record ID from URL params (hash routing: /#/receiving?record=xxx)
+  const searchParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const urlRecordId = searchParams.get("record");
+
+  const [selectedId, setSelectedId] = useState<string | null>(urlRecordId);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 

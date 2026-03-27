@@ -540,9 +540,9 @@ function MaterialDetailPanel({
   );
 }
 
-function MaterialsTab() {
+function MaterialsTab({ initialSelectedId }: { initialSelectedId?: string | null }) {
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showCreateMaterial, setShowCreateMaterial] = useState(false);
 
@@ -1668,7 +1668,12 @@ function ProductDetailPanel({
                       data-testid={`row-recipe-line-${line.id}`}
                     >
                       <TableCell className="text-sm font-medium">
-                        {line.productName}
+                        <span
+                          className="cursor-pointer hover:underline text-primary"
+                          onClick={(e) => { e.stopPropagation(); window.location.hash = `#/inventory?material=${line.productId}`; }}
+                        >
+                          {line.productName}
+                        </span>
                       </TableCell>
                       <TableCell className="text-sm font-mono text-muted-foreground">
                         {line.productSku}
@@ -1814,9 +1819,9 @@ function ProductListItem({
 
 // ─── Products Tab ──────────────────────────────────────────
 
-function ProductsTab() {
+function ProductsTab({ initialSelectedId }: { initialSelectedId?: string | null }) {
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -1968,8 +1973,13 @@ function ProductsTab() {
 // ═══════════════════════════════════════════════════════════
 
 export default function Inventory() {
+  // Read URL params for pre-selection (hash routing: /#/inventory?material=xxx or ?product=xxx)
+  const searchParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const urlMaterial = searchParams.get("material");
+  const urlProduct = searchParams.get("product");
+
   const [activeTab, setActiveTab] = useState<"materials" | "products">(
-    "materials"
+    urlProduct ? "products" : "materials"
   );
 
   const { data: inventoryData } = useQuery<InventoryGrouped[]>({
@@ -2024,7 +2034,7 @@ export default function Inventory() {
       </div>
 
       {/* Tab content */}
-      {activeTab === "materials" ? <MaterialsTab /> : <ProductsTab />}
+      {activeTab === "materials" ? <MaterialsTab initialSelectedId={urlMaterial} /> : <ProductsTab initialSelectedId={urlProduct} />}
     </div>
   );
 }

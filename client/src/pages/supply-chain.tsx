@@ -220,7 +220,14 @@ function DetailPanel({ item }: { item: ProductCapacity }) {
         <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span className="text-xs text-amber-800 dark:text-amber-300">
-            Production bottleneck: <strong>{item.bottleneckMaterial}</strong> — no stock available
+            Production bottleneck: <strong
+              className="cursor-pointer hover:underline text-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                const mat = item.materials.find(m => m.productName === item.bottleneckMaterial);
+                if (mat) window.location.hash = `#/inventory?material=${mat.productId}`;
+              }}
+            >{item.bottleneckMaterial}</strong> — no stock available
           </span>
         </div>
       )}
@@ -228,7 +235,14 @@ function DetailPanel({ item }: { item: ProductCapacity }) {
         <div className="flex items-center gap-2 rounded-md bg-muted/50 border border-border px-3 py-2">
           <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="text-xs text-muted-foreground">
-            Limiting material: <strong>{item.bottleneckMaterial}</strong> — constrains production to {formatQty(item.producibleUnits)} units
+            Limiting material: <strong
+              className="cursor-pointer hover:underline text-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                const mat = item.materials.find(m => m.productName === item.bottleneckMaterial);
+                if (mat) window.location.hash = `#/inventory?material=${mat.productId}`;
+              }}
+            >{item.bottleneckMaterial}</strong> — constrains production to {formatQty(item.producibleUnits)} units
           </span>
         </div>
       )}
@@ -276,7 +290,14 @@ function DetailPanel({ item }: { item: ProductCapacity }) {
                       <TableCell className="text-sm">
                         <div className="flex items-center gap-2">
                           <div>
-                            <div className="font-medium">{mat.productName}</div>
+                            <div className="font-medium">
+                              <span
+                                className="cursor-pointer hover:underline text-primary"
+                                onClick={(e) => { e.stopPropagation(); window.location.hash = `#/inventory?material=${mat.productId}`; }}
+                              >
+                                {mat.productName}
+                              </span>
+                            </div>
                             <div className="text-xs text-muted-foreground font-mono">{mat.sku}</div>
                           </div>
                           {mat.isBottleneck && (

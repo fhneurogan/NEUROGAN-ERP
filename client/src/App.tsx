@@ -1,5 +1,5 @@
 import { Switch, Route, Router, Link, useLocation } from "wouter";
-import { useHashLocation } from "wouter/use-hash-location";
+import { useHashLocationWithParams } from "@/lib/useHashLocationWithParams";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -139,7 +139,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          <Router hook={useHashLocation}>
+          <Router hook={useHashLocationWithParams}>
             <Switch>
               <Route path="/production/print/:id" component={BatchPrint} />
               <Route>

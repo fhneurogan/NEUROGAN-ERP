@@ -1449,6 +1449,12 @@ export class MemStorage implements IStorage {
   }
 
   async createProductionBatch(data: InsertProductionBatch, inputs: Omit<InsertProductionInput, "batchId">[]): Promise<ProductionBatchWithDetails> {
+    // Validate batch number uniqueness
+    const existingBatch = Array.from(this.productionBatches.values()).find(b => b.batchNumber === data.batchNumber);
+    if (existingBatch) {
+      throw new Error(`Batch number ${data.batchNumber} already exists. Please use a unique batch number.`);
+    }
+
     // Validate all input lots are approved (not quarantined)
     for (const input of inputs) {
       const lot = this.lots.get(input.lotId);
