@@ -200,6 +200,133 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// COA Documents (Certificates of Analysis)
+export const coaDocuments = pgTable("coa_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  lotId: varchar("lot_id").notNull(),
+  receivingRecordId: varchar("receiving_record_id"),
+  productionBatchId: varchar("production_batch_id"),
+  sourceType: text("source_type").notNull().default("SUPPLIER"), // INTERNAL_LAB, THIRD_PARTY_LAB, SUPPLIER
+  labName: text("lab_name"),
+  analystName: text("analyst_name"),
+  analysisDate: text("analysis_date"),
+  fileName: text("file_name"),
+  fileData: text("file_data"), // base64 encoded PDF/image
+  documentNumber: text("document_number"),
+  testsPerformed: text("tests_performed"), // JSON array: [{ testName, method, specification, result, passFail }]
+  overallResult: text("overall_result"), // PASS, FAIL, CONDITIONAL
+  identityTestPerformed: text("identity_test_performed"), // "true"/"false"
+  identityTestMethod: text("identity_test_method"),
+  identityConfirmed: text("identity_confirmed"), // "true"/"false"
+  qcReviewedBy: text("qc_reviewed_by"),
+  qcReviewedAt: timestamp("qc_reviewed_at"),
+  qcAccepted: text("qc_accepted"), // "true"/"false"
+  qcNotes: text("qc_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Supplier Qualifications (for relying on supplier COAs per 21 CFR 111.75)
+export const supplierQualifications = pgTable("supplier_qualifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  supplierId: varchar("supplier_id").notNull(),
+  qualificationDate: text("qualification_date"),
+  qualificationMethod: text("qualification_method"),
+  qualifiedBy: text("qualified_by"),
+  approvedBy: text("approved_by"),
+  lastRequalificationDate: text("last_requalification_date"),
+  nextRequalificationDue: text("next_requalification_due"),
+  requalificationFrequency: text("requalification_frequency"), // e.g. "12 months"
+  status: text("status").notNull().default("PENDING"), // QUALIFIED, PENDING, DISQUALIFIED
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Batch Production Records (21 CFR 111.255-260 compliance)
+export const batchProductionRecords = pgTable("batch_production_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productionBatchId: varchar("production_batch_id").notNull(),
+  batchNumber: text("batch_number").notNull(),
+  lotNumber: text("lot_number"),
+  productId: varchar("product_id").notNull(),
+  recipeId: varchar("recipe_id"),
+  status: text("status").notNull().default("IN_PROGRESS"), // IN_PROGRESS, PENDING_QC_REVIEW, APPROVED, REJECTED
+  // Yield tracking (Sec. 111.260(f))
+  theoreticalYield: decimal("theoretical_yield"),
+  actualYield: decimal("actual_yield"),
+  yieldPercentage: decimal("yield_percentage"),
+  yieldMinThreshold: decimal("yield_min_threshold"),
+  yieldMaxThreshold: decimal("yield_max_threshold"),
+  yieldDeviation: text("yield_deviation"), // "true"/"false"
+  // Equipment & cleaning (Sec. 111.260(b-c))
+  processingLines: text("processing_lines"),
+  cleaningVerified: text("cleaning_verified"), // "true"/"false"
+  cleaningVerifiedBy: text("cleaning_verified_by"),
+  cleaningVerifiedAt: timestamp("cleaning_verified_at"),
+  cleaningRecordReference: text("cleaning_record_reference"),
+  // QC Review (Sec. 111.260(l))
+  qcReviewedBy: text("qc_reviewed_by"),
+  qcReviewedAt: timestamp("qc_reviewed_at"),
+  qcDisposition: text("qc_disposition"), // APPROVED_FOR_DISTRIBUTION, REJECTED, REPROCESS
+  qcNotes: text("qc_notes"),
+  // Timestamps
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// BPR Steps (per-step documentation with dual verification)
+export const bprSteps = pgTable("bpr_steps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bprId: varchar("bpr_id").notNull(),
+  stepNumber: decimal("step_number").notNull(),
+  stepDescription: text("step_description").notNull(),
+  // Dual verification (Sec. 111.210(h)(3)(ii))
+  performedBy: text("performed_by"),
+  performedAt: timestamp("performed_at"),
+  verifiedBy: text("verified_by"), // MUST differ from performedBy
+  verifiedAt: timestamp("verified_at"),
+  // Component weighing/measuring (Sec. 111.260(j))
+  componentId: varchar("component_id"),
+  componentLotId: varchar("component_lot_id"),
+  targetWeightMeasure: decimal("target_weight_measure"),
+  actualWeightMeasure: decimal("actual_weight_measure"),
+  uom: text("uom"),
+  weighedBy: text("weighed_by"),
+  weightVerifiedBy: text("weight_verified_by"), // MUST differ from weighedBy
+  addedBy: text("added_by"),
+  additionVerifiedBy: text("addition_verified_by"), // MUST differ from addedBy
+  // Results
+  monitoringResults: text("monitoring_results"), // JSON
+  testResults: text("test_results"), // JSON
+  testReference: text("test_reference"),
+  notes: text("notes"),
+  status: text("status").notNull().default("PENDING"), // PENDING, IN_PROGRESS, COMPLETED, VERIFIED
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// BPR Deviations (Sec. 111.140(b)(3))
+export const bprDeviations = pgTable("bpr_deviations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bprId: varchar("bpr_id").notNull(),
+  bprStepId: varchar("bpr_step_id"),
+  deviationDescription: text("deviation_description").notNull(),
+  investigation: text("investigation"),
+  impactEvaluation: text("impact_evaluation"),
+  correctiveActions: text("corrective_actions"),
+  preventiveActions: text("preventive_actions"),
+  disposition: text("disposition"),
+  scientificRationale: text("scientific_rationale"),
+  reportedBy: text("reported_by"),
+  reportedAt: timestamp("reported_at"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  signatureOfReviewer: text("signature_of_reviewer"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Production Notes (append-only comment log on batches)
 export const productionNotes = pgTable("production_notes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -249,6 +376,11 @@ export const insertRecipeLineSchema = createInsertSchema(recipeLines).omit({ id:
 export const insertProductionNoteSchema = createInsertSchema(productionNotes).omit({ id: true, createdAt: true });
 export const insertSupplierDocumentSchema = createInsertSchema(supplierDocuments).omit({ id: true, uploadedAt: true });
 export const insertReceivingRecordSchema = createInsertSchema(receivingRecords).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCoaDocumentSchema = createInsertSchema(coaDocuments).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSupplierQualificationSchema = createInsertSchema(supplierQualifications).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBprSchema = createInsertSchema(batchProductionRecords).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBprStepSchema = createInsertSchema(bprSteps).omit({ id: true, createdAt: true });
+export const insertBprDeviationSchema = createInsertSchema(bprDeviations).omit({ id: true, createdAt: true });
 
 // Types
 export type Product = typeof products.$inferSelect;
@@ -291,6 +423,36 @@ export type ReceivingRecordWithDetails = ReceivingRecord & {
   productSku: string;
   lotNumber: string;
   supplierName: string | null;
+};
+
+export type CoaDocument = typeof coaDocuments.$inferSelect;
+export type InsertCoaDocument = z.infer<typeof insertCoaDocumentSchema>;
+export type SupplierQualification = typeof supplierQualifications.$inferSelect;
+export type InsertSupplierQualification = z.infer<typeof insertSupplierQualificationSchema>;
+
+export type CoaDocumentWithDetails = CoaDocument & {
+  productName: string;
+  productSku: string;
+  lotNumber: string;
+  supplierName: string | null;
+};
+
+export type SupplierQualificationWithDetails = SupplierQualification & {
+  supplierName: string;
+};
+
+export type BatchProductionRecord = typeof batchProductionRecords.$inferSelect;
+export type InsertBpr = z.infer<typeof insertBprSchema>;
+export type BprStep = typeof bprSteps.$inferSelect;
+export type InsertBprStep = z.infer<typeof insertBprStepSchema>;
+export type BprDeviation = typeof bprDeviations.$inferSelect;
+export type InsertBprDeviation = z.infer<typeof insertBprDeviationSchema>;
+
+export type BprWithDetails = BatchProductionRecord & {
+  productName: string;
+  productSku: string;
+  steps: BprStep[];
+  deviations: BprDeviation[];
 };
 
 // Inventory view type (computed from transactions)

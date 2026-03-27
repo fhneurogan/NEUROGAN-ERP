@@ -9,6 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -43,10 +51,14 @@ import {
   Download,
   X,
   File,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Supplier, SupplierDocument } from "@shared/schema";
+import type { Supplier, SupplierDocument, SupplierQualificationWithDetails } from "@shared/schema";
 import PurchaseOrders from "./purchase-orders";
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -469,6 +481,368 @@ function DocumentList({ supplierId }: { supplierId: string }) {
   );
 }
 
+// ─── Qualification Dialog ────────────────────────────────────
+
+function QualificationDialog({
+  supplierId,
+  qualification,
+  open,
+  onOpenChange,
+}: {
+  supplierId: string;
+  qualification?: SupplierQualificationWithDetails;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const isEditing = !!qualification;
+
+  const [qualificationDate, setQualificationDate] = useState(qualification?.qualificationDate ?? new Date().toISOString().slice(0, 10));
+  const [method, setMethod] = useState(qualification?.qualificationMethod ?? "");
+  const [qualifiedBy, setQualifiedBy] = useState(qualification?.qualifiedBy ?? "");
+  const [approvedBy, setApprovedBy] = useState(qualification?.approvedBy ?? "");
+  const [frequency, setFrequency] = useState(qualification?.requalificationFrequency ?? "12 months");
+  const [nextDue, setNextDue] = useState(qualification?.nextRequalificationDue ?? "");
+  const [status, setStatus] = useState(qualification?.status ?? "QUALIFIED");
+  const [notes, setNotes] = useState(qualification?.notes ?? "");
+
+  // Auto-calculate next due date when date or frequency changes
+  const calcNextDue = useCallback((dateStr: string, freq: string) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const months = parseInt(freq) || 12;
+    d.setMonth(d.getMonth() + months);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
+  const handleDateChange = useCallback((val: string) => {
+    setQualificationDate(val);
+    setNextDue(calcNextDue(val, frequency));
+  }, [frequency, calcNextDue]);
+
+  const handleFrequencyChange = useCallback((val: string) => {
+    setFrequency(val);
+    setNextDue(calcNextDue(qualificationDate, val));
+  }, [qualificationDate, calcNextDue]);
+
+  // Initialize nextDue on mount if empty
+  useState(() => {
+    if (!nextDue && qualificationDate) {
+      setNextDue(calcNextDue(qualificationDate, frequency));
+    }
+  });
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        supplierId,
+        qualificationDate,
+        qualificationMethod: method,
+        qualifiedBy,
+        approvedBy,
+        requalificationFrequency: frequency,
+        nextRequalificationDue: nextDue,
+        lastRequalificationDate: isEditing ? qualificationDate : null,
+        status,
+        notes: notes || null,
+      };
+      if (isEditing) {
+        return apiRequest("PUT", `/api/supplier-qualifications/${qualification.id}`, payload);
+      }
+      return apiRequest("POST", "/api/supplier-qualifications", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/supplier-qualifications"] });
+      toast({
+        title: isEditing ? "Qualification updated" : "Qualification created",
+      });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? "Edit Qualification" : "Start Qualification"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-sm">Qualification Date</Label>
+            <Input
+              type="date"
+              value={qualificationDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              className="text-sm"
+              data-testid="input-qual-date"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Method</Label>
+            <Textarea
+              placeholder="How was supplier reliability established? (e.g., audit, historical performance, third-party certification)"
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+              className="text-sm min-h-[60px]"
+              data-testid="input-qual-method"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Qualified By</Label>
+            <Input
+              placeholder="Person who performed qualification"
+              value={qualifiedBy}
+              onChange={(e) => setQualifiedBy(e.target.value)}
+              className="text-sm"
+              data-testid="input-qual-qualified-by"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Approved By</Label>
+            <Input
+              placeholder="QC personnel who approved"
+              value={approvedBy}
+              onChange={(e) => setApprovedBy(e.target.value)}
+              className="text-sm"
+              data-testid="input-qual-approved-by"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Requalification Frequency</Label>
+            <Select value={frequency} onValueChange={handleFrequencyChange}>
+              <SelectTrigger className="text-sm" data-testid="select-qual-frequency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="6 months">6 months</SelectItem>
+                <SelectItem value="12 months">12 months</SelectItem>
+                <SelectItem value="24 months">24 months</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Next Requalification Due</Label>
+            <Input
+              type="date"
+              value={nextDue}
+              onChange={(e) => setNextDue(e.target.value)}
+              className="text-sm"
+              data-testid="input-qual-next-due"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="text-sm" data-testid="select-qual-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="QUALIFIED">Qualified</SelectItem>
+                <SelectItem value="PENDING">Pending</SelectItem>
+                <SelectItem value="DISQUALIFIED">Disqualified</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Notes</Label>
+            <Textarea
+              placeholder="Optional notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="text-sm min-h-[60px]"
+              data-testid="input-qual-notes"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending || !qualifiedBy.trim() || !approvedBy.trim()}
+              data-testid="button-save-qualification"
+            >
+              {mutation.isPending ? (
+                <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving...</>
+              ) : (
+                isEditing ? "Update" : "Create"
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Qualification Status Section ────────────────────────────
+
+function QualificationStatusSection({ supplierId }: { supplierId: string }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingQual, setEditingQual] = useState<SupplierQualificationWithDetails | undefined>();
+
+  const { data: qualifications, isLoading } = useQuery<SupplierQualificationWithDetails[]>({
+    queryKey: ["/api/supplier-qualifications", { supplierId }],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/supplier-qualifications?supplierId=${supplierId}`);
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div>
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          Qualification Status
+        </h3>
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+
+  const qual = qualifications && qualifications.length > 0 ? qualifications[0] : null;
+
+  const isOverdue = qual?.nextRequalificationDue
+    ? new Date(qual.nextRequalificationDue) < new Date()
+    : false;
+
+  const statusBadge = (s: string) => {
+    switch (s) {
+      case "QUALIFIED":
+        return (
+          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-0 text-xs" data-testid="badge-qual-status">
+            <ShieldCheck className="h-3 w-3 mr-1" />
+            Qualified
+          </Badge>
+        );
+      case "PENDING":
+        return (
+          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-0 text-xs" data-testid="badge-qual-status">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      case "DISQUALIFIED":
+        return (
+          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-0 text-xs" data-testid="badge-qual-status">
+            <ShieldAlert className="h-3 w-3 mr-1" />
+            Disqualified
+          </Badge>
+        );
+      default:
+        return <Badge variant="secondary" className="text-xs">{s}</Badge>;
+    }
+  };
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+        <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+        Qualification Status
+      </h3>
+
+      {!qual ? (
+        <div className="rounded-lg border border-border bg-muted/30 p-4" data-testid="qual-not-qualified">
+          <div className="flex items-center justify-between">
+            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-0 text-xs" data-testid="badge-qual-status">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Not Qualified
+            </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setEditingQual(undefined);
+                setDialogOpen(true);
+              }}
+              data-testid="button-start-qualification"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Start Qualification
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="qual-details">
+          <div className="flex items-center justify-between">
+            {statusBadge(qual.status)}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setEditingQual(qual);
+                setDialogOpen(true);
+              }}
+              data-testid="button-edit-qualification"
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1" />
+              Edit
+            </Button>
+          </div>
+
+          {isOverdue && (
+            <div className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2" data-testid="warning-requalification-overdue">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-xs font-medium text-amber-800 dark:text-amber-300">Requalification overdue</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 text-sm">
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Qualification Date</span>
+              <p className="text-sm" data-testid="text-qual-date">{qual.qualificationDate ?? "—"}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Method</span>
+              <p className="text-sm whitespace-pre-wrap" data-testid="text-qual-method">{qual.qualificationMethod ?? "—"}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Qualified By</span>
+              <p className="text-sm" data-testid="text-qual-qualified-by">{qual.qualifiedBy ?? "—"}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Approved By</span>
+              <p className="text-sm" data-testid="text-qual-approved-by">{qual.approvedBy ?? "—"}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Last Requalification</span>
+              <p className="text-sm" data-testid="text-qual-last-requal">{qual.lastRequalificationDate ?? "—"}</p>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Next Requalification Due</span>
+              <p className={`text-sm ${isOverdue ? "text-amber-600 dark:text-amber-400 font-medium" : ""}`} data-testid="text-qual-next-due">
+                {qual.nextRequalificationDue ?? "—"}
+              </p>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">Frequency</span>
+              <p className="text-sm" data-testid="text-qual-frequency">{qual.requalificationFrequency ?? "—"}</p>
+            </div>
+            {qual.notes && (
+              <div>
+                <span className="text-xs font-medium text-muted-foreground">Notes</span>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-qual-notes">{qual.notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <QualificationDialog
+        key={editingQual?.id ?? "new"}
+        supplierId={supplierId}
+        qualification={editingQual}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
+    </div>
+  );
+}
+
 // ─── Supplier Detail Panel ──────────────────────────────────
 
 function SupplierDetail({
@@ -521,6 +895,9 @@ function SupplierDetail({
           </div>
         </div>
       </div>
+
+      {/* Qualification Status */}
+      <QualificationStatusSection supplierId={supplier.id} />
 
       {/* Documents Section */}
       <div>

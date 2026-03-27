@@ -23,6 +23,10 @@ import {
   type SupplierDocument, type InsertSupplierDocument,
   type BottleneckMaterial, type LowestCapacityProduct, type DashboardSupplyChain,
   type ReceivingRecord, type InsertReceivingRecord, type ReceivingRecordWithDetails,
+  type CoaDocument, type InsertCoaDocument, type CoaDocumentWithDetails,
+  type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
+  type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
+  type BprDeviation, type InsertBprDeviation, type BprWithDetails,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -231,6 +235,36 @@ export interface IStorage {
   qcReviewReceivingRecord(id: string, disposition: string, reviewedBy: string, notes?: string): Promise<ReceivingRecord | undefined>;
   getNextReceivingIdentifier(): Promise<string>;
   getQuarantinedLots(): Promise<ReceivingRecordWithDetails[]>;
+
+  // COA Documents
+  getCoaDocuments(filters?: { lotId?: string; productionBatchId?: string; sourceType?: string; overallResult?: string }): Promise<CoaDocumentWithDetails[]>;
+  getCoaDocument(id: string): Promise<CoaDocumentWithDetails | undefined>;
+  createCoaDocument(data: InsertCoaDocument): Promise<CoaDocument>;
+  updateCoaDocument(id: string, data: Partial<InsertCoaDocument>): Promise<CoaDocument | undefined>;
+  qcReviewCoa(id: string, accepted: boolean, reviewedBy: string, notes?: string): Promise<CoaDocument | undefined>;
+  getCoasByLot(lotId: string): Promise<CoaDocumentWithDetails[]>;
+
+  // Supplier Qualifications
+  getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]>;
+  getSupplierQualification(id: string): Promise<SupplierQualificationWithDetails | undefined>;
+  createSupplierQualification(data: InsertSupplierQualification): Promise<SupplierQualification>;
+  updateSupplierQualification(id: string, data: Partial<InsertSupplierQualification>): Promise<SupplierQualification | undefined>;
+
+  // Batch Production Records
+  getBprs(filters?: { status?: string; productionBatchId?: string }): Promise<BprWithDetails[]>;
+  getBpr(id: string): Promise<BprWithDetails | undefined>;
+  getBprByBatchId(productionBatchId: string): Promise<BprWithDetails | undefined>;
+  createBpr(data: InsertBpr): Promise<BatchProductionRecord>;
+  updateBpr(id: string, data: Partial<InsertBpr>): Promise<BatchProductionRecord | undefined>;
+  submitBprForReview(id: string): Promise<BatchProductionRecord | undefined>;
+  qcReviewBpr(id: string, disposition: string, reviewedBy: string, notes?: string): Promise<BatchProductionRecord | undefined>;
+
+  // BPR Steps
+  addBprStep(bprId: string, data: InsertBprStep): Promise<BprStep>;
+  updateBprStep(bprId: string, stepId: string, data: Partial<InsertBprStep>): Promise<BprStep | undefined>;
+
+  // BPR Deviations
+  addBprDeviation(bprId: string, data: InsertBprDeviation): Promise<BprDeviation>;
 }
 
 export class MemStorage implements IStorage {
@@ -251,6 +285,11 @@ export class MemStorage implements IStorage {
   private productionNotesMap: Map<string, ProductionNote>;
   private supplierDocumentsMap: Map<string, SupplierDocument>;
   private receivingRecordsMap: Map<string, ReceivingRecord>;
+  private coaDocumentsMap: Map<string, CoaDocument>;
+  private supplierQualificationsMap: Map<string, SupplierQualification>;
+  private bprMap: Map<string, BatchProductionRecord>;
+  private bprStepsMap: Map<string, BprStep>;
+  private bprDeviationsMap: Map<string, BprDeviation>;
 
   constructor() {
     this.products = new Map();
@@ -269,6 +308,11 @@ export class MemStorage implements IStorage {
     this.productionNotesMap = new Map();
     this.supplierDocumentsMap = new Map();
     this.receivingRecordsMap = new Map();
+    this.coaDocumentsMap = new Map();
+    this.supplierQualificationsMap = new Map();
+    this.bprMap = new Map();
+    this.bprStepsMap = new Map();
+    this.bprDeviationsMap = new Map();
     this.settings = {
       id: randomUUID(),
       companyName: "Neurogan",
@@ -1560,6 +1604,25 @@ export class MemStorage implements IStorage {
       }
     }
 
+    // Auto-create BPR when batch starts production
+    if (data.status === "IN_PROGRESS") {
+      const existingBpr = await this.getBprByBatchId(id);
+      if (!existingBpr) {
+        const batch = this.productionBatches.get(id)!;
+        const recipe = Array.from(this.recipes.values()).find(r => r.productId === batch.productId);
+        await this.createBpr({
+          productionBatchId: id,
+          batchNumber: batch.batchNumber,
+          lotNumber: batch.outputLotNumber ?? null,
+          productId: batch.productId,
+          recipeId: recipe?.id ?? null,
+          status: "IN_PROGRESS",
+          theoreticalYield: batch.plannedQuantity,
+          startedAt: new Date(),
+        });
+      }
+    }
+
     return updated;
   }
 
@@ -2500,6 +2563,380 @@ export class MemStorage implements IStorage {
 
   async getQuarantinedLots(): Promise<ReceivingRecordWithDetails[]> {
     return this.getReceivingRecords({ status: "QUARANTINED" });
+  }
+
+  // ─── COA Documents ─────────────────────────────────────
+
+  private enrichCoaDocument(coa: CoaDocument): CoaDocumentWithDetails {
+    const lot = this.lots.get(coa.lotId);
+    const product = lot ? this.products.get(lot.productId) : undefined;
+    return {
+      ...coa,
+      productName: product?.name ?? "Unknown",
+      productSku: product?.sku ?? "",
+      lotNumber: lot?.lotNumber ?? "",
+      supplierName: lot?.supplierName ?? null,
+    };
+  }
+
+  async getCoaDocuments(filters?: { lotId?: string; productionBatchId?: string; sourceType?: string; overallResult?: string }): Promise<CoaDocumentWithDetails[]> {
+    let docs = Array.from(this.coaDocumentsMap.values());
+    if (filters?.lotId) docs = docs.filter(d => d.lotId === filters.lotId);
+    if (filters?.productionBatchId) docs = docs.filter(d => d.productionBatchId === filters.productionBatchId);
+    if (filters?.sourceType) docs = docs.filter(d => d.sourceType === filters.sourceType);
+    if (filters?.overallResult) docs = docs.filter(d => d.overallResult === filters.overallResult);
+    return docs.map(d => this.enrichCoaDocument(d)).sort((a, b) => {
+      const aTime = a.createdAt ? a.createdAt.getTime() : 0;
+      const bTime = b.createdAt ? b.createdAt.getTime() : 0;
+      return bTime - aTime;
+    });
+  }
+
+  async getCoaDocument(id: string): Promise<CoaDocumentWithDetails | undefined> {
+    const doc = this.coaDocumentsMap.get(id);
+    if (!doc) return undefined;
+    return this.enrichCoaDocument(doc);
+  }
+
+  async createCoaDocument(data: InsertCoaDocument): Promise<CoaDocument> {
+    const now = new Date();
+    const doc: CoaDocument = {
+      id: randomUUID(),
+      lotId: data.lotId,
+      receivingRecordId: data.receivingRecordId ?? null,
+      productionBatchId: data.productionBatchId ?? null,
+      sourceType: data.sourceType ?? "SUPPLIER",
+      labName: data.labName ?? null,
+      analystName: data.analystName ?? null,
+      analysisDate: data.analysisDate ?? null,
+      fileName: data.fileName ?? null,
+      fileData: data.fileData ?? null,
+      documentNumber: data.documentNumber ?? null,
+      testsPerformed: data.testsPerformed ?? null,
+      overallResult: data.overallResult ?? null,
+      identityTestPerformed: data.identityTestPerformed ?? null,
+      identityTestMethod: data.identityTestMethod ?? null,
+      identityConfirmed: data.identityConfirmed ?? null,
+      qcReviewedBy: data.qcReviewedBy ?? null,
+      qcReviewedAt: data.qcReviewedAt ?? null,
+      qcAccepted: data.qcAccepted ?? null,
+      qcNotes: data.qcNotes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.coaDocumentsMap.set(doc.id, doc);
+    return doc;
+  }
+
+  async updateCoaDocument(id: string, data: Partial<InsertCoaDocument>): Promise<CoaDocument | undefined> {
+    const existing = this.coaDocumentsMap.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, updatedAt: new Date() } as CoaDocument;
+    this.coaDocumentsMap.set(id, updated);
+    return updated;
+  }
+
+  async qcReviewCoa(id: string, accepted: boolean, reviewedBy: string, notes?: string): Promise<CoaDocument | undefined> {
+    const existing = this.coaDocumentsMap.get(id);
+    if (!existing) return undefined;
+    const updated: CoaDocument = {
+      ...existing,
+      qcReviewedBy: reviewedBy,
+      qcReviewedAt: new Date(),
+      qcAccepted: accepted ? "true" : "false",
+      qcNotes: notes ?? existing.qcNotes,
+      updatedAt: new Date(),
+    };
+    this.coaDocumentsMap.set(id, updated);
+    return updated;
+  }
+
+  async getCoasByLot(lotId: string): Promise<CoaDocumentWithDetails[]> {
+    return this.getCoaDocuments({ lotId });
+  }
+
+  // ─── Supplier Qualifications ───────────────────────────
+
+  private enrichSupplierQualification(sq: SupplierQualification): SupplierQualificationWithDetails {
+    const supplier = this.suppliers.get(sq.supplierId);
+    return { ...sq, supplierName: supplier?.name ?? "Unknown" };
+  }
+
+  async getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]> {
+    let records = Array.from(this.supplierQualificationsMap.values());
+    if (supplierId) records = records.filter(r => r.supplierId === supplierId);
+    return records.map(r => this.enrichSupplierQualification(r)).sort((a, b) => {
+      const aTime = a.createdAt ? a.createdAt.getTime() : 0;
+      const bTime = b.createdAt ? b.createdAt.getTime() : 0;
+      return bTime - aTime;
+    });
+  }
+
+  async getSupplierQualification(id: string): Promise<SupplierQualificationWithDetails | undefined> {
+    const sq = this.supplierQualificationsMap.get(id);
+    if (!sq) return undefined;
+    return this.enrichSupplierQualification(sq);
+  }
+
+  async createSupplierQualification(data: InsertSupplierQualification): Promise<SupplierQualification> {
+    const now = new Date();
+    const sq: SupplierQualification = {
+      id: randomUUID(),
+      supplierId: data.supplierId,
+      qualificationDate: data.qualificationDate ?? null,
+      qualificationMethod: data.qualificationMethod ?? null,
+      qualifiedBy: data.qualifiedBy ?? null,
+      approvedBy: data.approvedBy ?? null,
+      lastRequalificationDate: data.lastRequalificationDate ?? null,
+      nextRequalificationDue: data.nextRequalificationDue ?? null,
+      requalificationFrequency: data.requalificationFrequency ?? null,
+      status: data.status ?? "PENDING",
+      notes: data.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.supplierQualificationsMap.set(sq.id, sq);
+    return sq;
+  }
+
+  async updateSupplierQualification(id: string, data: Partial<InsertSupplierQualification>): Promise<SupplierQualification | undefined> {
+    const existing = this.supplierQualificationsMap.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, updatedAt: new Date() } as SupplierQualification;
+    this.supplierQualificationsMap.set(id, updated);
+    return updated;
+  }
+
+  // ─── Batch Production Records ──────────────────────────
+
+  private enrichBpr(bpr: BatchProductionRecord): BprWithDetails {
+    const product = this.products.get(bpr.productId);
+    const steps = Array.from(this.bprStepsMap.values())
+      .filter(s => s.bprId === bpr.id)
+      .sort((a, b) => parseFloat(a.stepNumber) - parseFloat(b.stepNumber));
+    const deviations = Array.from(this.bprDeviationsMap.values())
+      .filter(d => d.bprId === bpr.id)
+      .sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
+    return {
+      ...bpr,
+      productName: product?.name ?? "Unknown",
+      productSku: product?.sku ?? "",
+      steps,
+      deviations,
+    };
+  }
+
+  async getBprs(filters?: { status?: string; productionBatchId?: string }): Promise<BprWithDetails[]> {
+    let bprs = Array.from(this.bprMap.values());
+    if (filters?.status) {
+      bprs = bprs.filter(b => b.status === filters.status);
+    }
+    if (filters?.productionBatchId) {
+      bprs = bprs.filter(b => b.productionBatchId === filters.productionBatchId);
+    }
+    bprs.sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+    return bprs.map(b => this.enrichBpr(b));
+  }
+
+  async getBpr(id: string): Promise<BprWithDetails | undefined> {
+    const bpr = this.bprMap.get(id);
+    if (!bpr) return undefined;
+    return this.enrichBpr(bpr);
+  }
+
+  async getBprByBatchId(productionBatchId: string): Promise<BprWithDetails | undefined> {
+    const bpr = Array.from(this.bprMap.values()).find(b => b.productionBatchId === productionBatchId);
+    if (!bpr) return undefined;
+    return this.enrichBpr(bpr);
+  }
+
+  async createBpr(data: InsertBpr): Promise<BatchProductionRecord> {
+    const id = randomUUID();
+    const now = new Date();
+    const bpr: BatchProductionRecord = {
+      id,
+      productionBatchId: data.productionBatchId,
+      batchNumber: data.batchNumber,
+      lotNumber: data.lotNumber ?? null,
+      productId: data.productId,
+      recipeId: data.recipeId ?? null,
+      status: data.status ?? "IN_PROGRESS",
+      theoreticalYield: data.theoreticalYield ?? null,
+      actualYield: data.actualYield ?? null,
+      yieldPercentage: data.yieldPercentage ?? null,
+      yieldMinThreshold: data.yieldMinThreshold ?? null,
+      yieldMaxThreshold: data.yieldMaxThreshold ?? null,
+      yieldDeviation: data.yieldDeviation ?? null,
+      processingLines: data.processingLines ?? null,
+      cleaningVerified: data.cleaningVerified ?? null,
+      cleaningVerifiedBy: data.cleaningVerifiedBy ?? null,
+      cleaningVerifiedAt: data.cleaningVerifiedAt ?? null,
+      cleaningRecordReference: data.cleaningRecordReference ?? null,
+      qcReviewedBy: data.qcReviewedBy ?? null,
+      qcReviewedAt: data.qcReviewedAt ?? null,
+      qcDisposition: data.qcDisposition ?? null,
+      qcNotes: data.qcNotes ?? null,
+      startedAt: data.startedAt ?? null,
+      completedAt: data.completedAt ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.bprMap.set(id, bpr);
+    return bpr;
+  }
+
+  async updateBpr(id: string, data: Partial<InsertBpr>): Promise<BatchProductionRecord | undefined> {
+    const existing = this.bprMap.get(id);
+    if (!existing) return undefined;
+    if (existing.status !== "IN_PROGRESS") {
+      throw new Error("BPR can only be updated while IN_PROGRESS");
+    }
+    const updated: BatchProductionRecord = {
+      ...existing,
+      ...data,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: new Date(),
+    };
+    this.bprMap.set(id, updated);
+    return updated;
+  }
+
+  async submitBprForReview(id: string): Promise<BatchProductionRecord | undefined> {
+    const existing = this.bprMap.get(id);
+    if (!existing) return undefined;
+    if (existing.status !== "IN_PROGRESS") {
+      throw new Error("BPR can only be submitted for review while IN_PROGRESS");
+    }
+    const updated: BatchProductionRecord = {
+      ...existing,
+      status: "PENDING_QC_REVIEW",
+      updatedAt: new Date(),
+    };
+    this.bprMap.set(id, updated);
+    return updated;
+  }
+
+  async qcReviewBpr(id: string, disposition: string, reviewedBy: string, notes?: string): Promise<BatchProductionRecord | undefined> {
+    const existing = this.bprMap.get(id);
+    if (!existing) return undefined;
+    if (existing.status !== "PENDING_QC_REVIEW") {
+      throw new Error("BPR must be in PENDING_QC_REVIEW status for QC review");
+    }
+    const isApproved = disposition === "APPROVED_FOR_DISTRIBUTION" || disposition === "APPROVED";
+    const updated: BatchProductionRecord = {
+      ...existing,
+      qcReviewedBy: reviewedBy,
+      qcReviewedAt: new Date(),
+      qcDisposition: disposition,
+      qcNotes: notes ?? existing.qcNotes,
+      status: isApproved ? "APPROVED" : "REJECTED",
+      completedAt: isApproved ? new Date() : existing.completedAt,
+      updatedAt: new Date(),
+    };
+    this.bprMap.set(id, updated);
+    return updated;
+  }
+
+  async addBprStep(bprId: string, data: InsertBprStep): Promise<BprStep> {
+    const bpr = this.bprMap.get(bprId);
+    if (!bpr) throw new Error("BPR not found");
+    if (bpr.status !== "IN_PROGRESS") {
+      throw new Error("Steps can only be added while BPR is IN_PROGRESS");
+    }
+    const id = randomUUID();
+    const step: BprStep = {
+      id,
+      bprId,
+      stepNumber: data.stepNumber,
+      stepDescription: data.stepDescription,
+      performedBy: data.performedBy ?? null,
+      performedAt: data.performedAt ?? null,
+      verifiedBy: data.verifiedBy ?? null,
+      verifiedAt: data.verifiedAt ?? null,
+      componentId: data.componentId ?? null,
+      componentLotId: data.componentLotId ?? null,
+      targetWeightMeasure: data.targetWeightMeasure ?? null,
+      actualWeightMeasure: data.actualWeightMeasure ?? null,
+      uom: data.uom ?? null,
+      weighedBy: data.weighedBy ?? null,
+      weightVerifiedBy: data.weightVerifiedBy ?? null,
+      addedBy: data.addedBy ?? null,
+      additionVerifiedBy: data.additionVerifiedBy ?? null,
+      monitoringResults: data.monitoringResults ?? null,
+      testResults: data.testResults ?? null,
+      testReference: data.testReference ?? null,
+      notes: data.notes ?? null,
+      status: data.status ?? "PENDING",
+      createdAt: new Date(),
+    };
+    this.bprStepsMap.set(id, step);
+    return step;
+  }
+
+  async updateBprStep(bprId: string, stepId: string, data: Partial<InsertBprStep>): Promise<BprStep | undefined> {
+    const bpr = this.bprMap.get(bprId);
+    if (!bpr) throw new Error("BPR not found");
+    if (bpr.status !== "IN_PROGRESS") {
+      throw new Error("Steps can only be updated while BPR is IN_PROGRESS");
+    }
+    const existing = this.bprStepsMap.get(stepId);
+    if (!existing || existing.bprId !== bprId) return undefined;
+
+    // Dual verification checks
+    const mergedPerformedBy = data.performedBy ?? existing.performedBy;
+    const mergedVerifiedBy = data.verifiedBy ?? existing.verifiedBy;
+    if (mergedVerifiedBy && mergedPerformedBy && mergedVerifiedBy === mergedPerformedBy) {
+      throw new Error("Verification failed: verifiedBy must differ from performedBy");
+    }
+
+    const mergedWeighedBy = data.weighedBy ?? existing.weighedBy;
+    const mergedWeightVerifiedBy = data.weightVerifiedBy ?? existing.weightVerifiedBy;
+    if (mergedWeightVerifiedBy && mergedWeighedBy && mergedWeightVerifiedBy === mergedWeighedBy) {
+      throw new Error("Verification failed: weightVerifiedBy must differ from weighedBy");
+    }
+
+    const mergedAddedBy = data.addedBy ?? existing.addedBy;
+    const mergedAdditionVerifiedBy = data.additionVerifiedBy ?? existing.additionVerifiedBy;
+    if (mergedAdditionVerifiedBy && mergedAddedBy && mergedAdditionVerifiedBy === mergedAddedBy) {
+      throw new Error("Verification failed: additionVerifiedBy must differ from addedBy");
+    }
+
+    const updated: BprStep = {
+      ...existing,
+      ...data,
+      id: existing.id,
+      bprId: existing.bprId,
+      createdAt: existing.createdAt,
+    };
+    this.bprStepsMap.set(stepId, updated);
+    return updated;
+  }
+
+  async addBprDeviation(bprId: string, data: InsertBprDeviation): Promise<BprDeviation> {
+    const bpr = this.bprMap.get(bprId);
+    if (!bpr) throw new Error("BPR not found");
+    const id = randomUUID();
+    const deviation: BprDeviation = {
+      id,
+      bprId,
+      bprStepId: data.bprStepId ?? null,
+      deviationDescription: data.deviationDescription,
+      investigation: data.investigation ?? null,
+      impactEvaluation: data.impactEvaluation ?? null,
+      correctiveActions: data.correctiveActions ?? null,
+      preventiveActions: data.preventiveActions ?? null,
+      disposition: data.disposition ?? null,
+      scientificRationale: data.scientificRationale ?? null,
+      reportedBy: data.reportedBy ?? null,
+      reportedAt: data.reportedAt ?? null,
+      reviewedBy: data.reviewedBy ?? null,
+      reviewedAt: data.reviewedAt ?? null,
+      signatureOfReviewer: data.signatureOfReviewer ?? null,
+      createdAt: new Date(),
+    };
+    this.bprDeviationsMap.set(id, deviation);
+    return deviation;
   }
 
   // ─── Auto-seed product categories from product names ──

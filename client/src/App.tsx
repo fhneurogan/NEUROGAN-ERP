@@ -15,8 +15,11 @@ import Transactions from "@/pages/transactions";
 import SuppliersTab from "@/pages/suppliers-tab";
 import Production from "@/pages/production";
 import Receiving from "@/pages/receiving";
+import CoaLibrary from "@/pages/coa-library";
 import Settings from "@/pages/settings";
 import SupplyChain from "@/pages/supply-chain";
+import BprDetail from "@/pages/bpr";
+import BatchPrint from "@/pages/batch-print";
 
 const navItems = [
   { href: "/", label: "Dashboard" },
@@ -115,7 +118,9 @@ function AppLayout() {
           <Route path="/supply-chain" component={SupplyChain} />
           <Route path="/suppliers" component={SuppliersTab} />
           <Route path="/receiving" component={Receiving} />
+          <Route path="/coa" component={CoaLibrary} />
           <Route path="/production" component={Production} />
+          <Route path="/bpr/:id" component={BprDetail} />
           <Route path="/transactions" component={Transactions} />
           <Route path="/settings" component={Settings} />
           <Route component={NotFound} />
@@ -135,7 +140,12 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router hook={useHashLocation}>
-            <AppLayout />
+            <Switch>
+              <Route path="/production/print/:id" component={BatchPrint} />
+              <Route>
+                <AppLayout />
+              </Route>
+            </Switch>
           </Router>
         </TooltipProvider>
       </QueryClientProvider>

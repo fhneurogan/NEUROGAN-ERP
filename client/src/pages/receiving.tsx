@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import {
   Clock,
   Package,
   AlertTriangle,
+  FileCheck,
   CheckCircle2,
   XCircle,
   Shield,
@@ -31,9 +33,11 @@ import {
   Loader2,
   Send,
   Save,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
-import type { ReceivingRecordWithDetails } from "@shared/schema";
+import type { ReceivingRecordWithDetails, CoaDocumentWithDetails } from "@shared/schema";
 
 // ── Status badge ──
 
@@ -220,6 +224,123 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
   );
 }
 
+// ── COA Status section ──
+
+function CoaStatusSection({ lotId }: { lotId: string }) {
+  const { data: coaDocs, isLoading } = useQuery<CoaDocumentWithDetails[]>({
+    queryKey: ["/api/coa/by-lot", lotId],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/coa/by-lot/${lotId}`);
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div>
+        <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          COA Status
+        </h3>
+        <Skeleton className="h-12 w-full" />
+      </div>
+    );
+  }
+
+  const docs = coaDocs ?? [];
+  const hasCoaDocs = docs.length > 0;
+  const acceptedDoc = docs.find((d) => d.qcAccepted === "true");
+  const pendingDoc = docs.find((d) => d.qcAccepted !== "true" && d.qcAccepted !== "false");
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <FileText className="h-4 w-4 text-muted-foreground" />
+        COA Status
+      </h3>
+
+      {!hasCoaDocs ? (
+        <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3" data-testid="coa-status-none">
+          <div className="flex items-center justify-between">
+            <Badge className="bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-0 text-xs" data-testid="badge-coa-status">
+              <XCircle className="h-3 w-3 mr-1" />
+              No COA on file
+            </Badge>
+            <Link href="/coa">
+              <Button variant="link" size="sm" className="text-xs h-auto p-0" data-testid="link-upload-coa">
+                Upload COA <ExternalLink className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      ) : acceptedDoc ? (
+        <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3 space-y-2" data-testid="coa-status-accepted">
+          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-0 text-xs" data-testid="badge-coa-status">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            COA Reviewed ✓
+          </Badge>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            {acceptedDoc.documentNumber && (
+              <div>
+                <span className="text-muted-foreground">Doc #:</span>{" "}
+                <span className="font-mono" data-testid="text-coa-doc-number">{acceptedDoc.documentNumber}</span>
+              </div>
+            )}
+            <div>
+              <span className="text-muted-foreground">Source:</span>{" "}
+              <span data-testid="text-coa-source">{acceptedDoc.sourceType ?? "—"}</span>
+            </div>
+            {acceptedDoc.overallResult && (
+              <div>
+                <span className="text-muted-foreground">Result:</span>{" "}
+                <span data-testid="text-coa-result">{acceptedDoc.overallResult}</span>
+              </div>
+            )}
+            <div>
+              <span className="text-muted-foreground">Review:</span>{" "}
+              <span className="text-emerald-700 dark:text-emerald-400" data-testid="text-coa-review">Accepted</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2" data-testid="coa-status-pending">
+          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-0 text-xs" data-testid="badge-coa-status">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            COA Pending Review
+          </Badge>
+          {(() => {
+            const doc = pendingDoc || docs[0];
+            return (
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                {doc.documentNumber && (
+                  <div>
+                    <span className="text-muted-foreground">Doc #:</span>{" "}
+                    <span className="font-mono" data-testid="text-coa-doc-number">{doc.documentNumber}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-muted-foreground">Source:</span>{" "}
+                  <span data-testid="text-coa-source">{doc.sourceType ?? "—"}</span>
+                </div>
+                {doc.overallResult && (
+                  <div>
+                    <span className="text-muted-foreground">Result:</span>{" "}
+                    <span data-testid="text-coa-result">{doc.overallResult}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-muted-foreground">Review:</span>{" "}
+                  <span className="text-amber-700 dark:text-amber-400" data-testid="text-coa-review">Pending</span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Detail panel ──
 
 function ReceivingDetail({
@@ -369,6 +490,11 @@ function ReceivingDetail({
           </div>
         </div>
       </div>
+
+      <Separator />
+
+      {/* COA Status */}
+      <CoaStatusSection lotId={record.lotId} />
 
       <Separator />
 
@@ -655,7 +781,18 @@ export default function Receiving() {
         {/* Header & filters */}
         <div className="px-4 pt-4 pb-3 space-y-3 border-b border-border/50">
           <div className="flex items-center justify-between">
-            <h1 className="text-base font-semibold text-foreground">Receiving & Quarantine</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-base font-semibold text-foreground">Receiving & Quarantine</h1>
+              <Link href="/coa">
+                <button
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  data-testid="link-coa-library"
+                >
+                  <FileCheck className="h-3.5 w-3.5" />
+                  COA Library
+                </button>
+              </Link>
+            </div>
             <span className="text-xs text-muted-foreground" data-testid="text-total-count">
               {filteredRecords.length} record{filteredRecords.length !== 1 ? "s" : ""}
             </span>

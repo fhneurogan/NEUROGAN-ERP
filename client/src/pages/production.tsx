@@ -55,7 +55,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, Trash2, Beaker, Play, CheckCircle, Pause, RotateCcw, Pencil, XCircle, AlertTriangle, Info, MessageSquare, Send } from "lucide-react";
+import { Plus, Trash2, Beaker, Play, CheckCircle, Pause, RotateCcw, Pencil, XCircle, AlertTriangle, Info, MessageSquare, Send, ClipboardCheck, Printer } from "lucide-react";
+import { Link } from "wouter";
 import { formatQty } from "@/lib/formatQty";
 import type {
   ProductionBatchWithDetails,
@@ -1287,6 +1288,39 @@ function ConfirmDialog({
   );
 }
 
+// ── BPR Link ──
+
+function BprLink({ batchId, batchStatus }: { batchId: string; batchStatus: string }) {
+  const showBpr = ["IN_PROGRESS", "ON_HOLD", "COMPLETED", "SCRAPPED"].includes(batchStatus);
+
+  const { data: bprData, isLoading: bprLoading } = useQuery<{ id: string } | null>({
+    queryKey: ["/api/batch-production-records/by-batch", batchId],
+    enabled: showBpr,
+  });
+
+  if (!showBpr) return null;
+
+  if (bprLoading) {
+    return (
+      <Button variant="outline" size="sm" disabled className="opacity-50">
+        <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
+        Loading BPR...
+      </Button>
+    );
+  }
+
+  if (!bprData || !bprData.id) return null;
+
+  return (
+    <Link href={`/bpr/${bprData.id}`}>
+      <Button variant="outline" size="sm" data-testid="button-view-bpr">
+        <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
+        View Batch Record
+      </Button>
+    </Link>
+  );
+}
+
 // ── Detail Panel ──
 
 function BatchDetail({
@@ -1480,6 +1514,16 @@ function BatchDetail({
             Delete Batch
           </Button>
         )}
+        <BprLink batchId={batch.id} batchStatus={batch.status} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { window.location.hash = `#/production/print/${batch.id}`; }}
+          data-testid="button-print-batch"
+        >
+          <Printer className="h-3.5 w-3.5 mr-1.5" />
+          Print
+        </Button>
       </div>
 
       {/* Input materials table */}

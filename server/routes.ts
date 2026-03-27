@@ -14,6 +14,11 @@ import {
   insertProductionNoteSchema,
   insertSupplierDocumentSchema,
   insertReceivingRecordSchema,
+  insertCoaDocumentSchema,
+  insertSupplierQualificationSchema,
+  insertBprSchema,
+  insertBprStepSchema,
+  insertBprDeviationSchema,
 } from "@shared/schema";
 import { ZodError } from "zod";
 
@@ -897,6 +902,261 @@ export async function registerRoutes(
       res.json(record);
     } catch (err) {
       res.status(500).json({ message: "Failed to review receiving record" });
+    }
+  });
+
+  // ─── COA Documents ────────────────────────────────────
+
+  app.post("/api/coa", async (req, res) => {
+    try {
+      const data = insertCoaDocumentSchema.parse(req.body);
+      const doc = await storage.createCoaDocument(data);
+      res.status(201).json(doc);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ message: formatZodError(err) });
+      }
+      res.status(500).json({ message: "Failed to create COA document" });
+    }
+  });
+
+  app.get("/api/coa/by-lot/:lotId", async (req, res) => {
+    try {
+      const docs = await storage.getCoasByLot(req.params.lotId);
+      res.json(docs);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch COAs for lot" });
+    }
+  });
+
+  app.get("/api/coa", async (req, res) => {
+    try {
+      const filters = {
+        lotId: req.query.lotId as string | undefined,
+        productionBatchId: req.query.productionBatchId as string | undefined,
+        sourceType: req.query.sourceType as string | undefined,
+        overallResult: req.query.overallResult as string | undefined,
+      };
+      const docs = await storage.getCoaDocuments(filters);
+      res.json(docs);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch COA documents" });
+    }
+  });
+
+  app.get("/api/coa/:id", async (req, res) => {
+    try {
+      const doc = await storage.getCoaDocument(req.params.id);
+      if (!doc) return res.status(404).json({ message: "COA document not found" });
+      res.json(doc);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch COA document" });
+    }
+  });
+
+  app.put("/api/coa/:id", async (req, res) => {
+    try {
+      const data = insertCoaDocumentSchema.partial().parse(req.body);
+      const doc = await storage.updateCoaDocument(req.params.id, data);
+      if (!doc) return res.status(404).json({ message: "COA document not found" });
+      res.json(doc);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ message: formatZodError(err) });
+      }
+      res.status(500).json({ message: "Failed to update COA document" });
+    }
+  });
+
+  app.post("/api/coa/:id/qc-review", async (req, res) => {
+    try {
+      const { accepted, reviewedBy, notes } = req.body;
+      if (typeof accepted !== "boolean" || !reviewedBy) {
+        return res.status(400).json({ message: "accepted (boolean) and reviewedBy (string) are required" });
+      }
+      const doc = await storage.qcReviewCoa(req.params.id, accepted, reviewedBy, notes);
+      if (!doc) return res.status(404).json({ message: "COA document not found" });
+      res.json(doc);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to review COA document" });
+    }
+  });
+
+  // ─── Supplier Qualifications ──────────────────────────
+
+  app.post("/api/supplier-qualifications", async (req, res) => {
+    try {
+      const data = insertSupplierQualificationSchema.parse(req.body);
+      const sq = await storage.createSupplierQualification(data);
+      res.status(201).json(sq);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ message: formatZodError(err) });
+      }
+      res.status(500).json({ message: "Failed to create supplier qualification" });
+    }
+  });
+
+  app.get("/api/supplier-qualifications", async (req, res) => {
+    try {
+      const supplierId = req.query.supplierId as string | undefined;
+      const records = await storage.getSupplierQualifications(supplierId);
+      res.json(records);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch supplier qualifications" });
+    }
+  });
+
+  app.get("/api/supplier-qualifications/:id", async (req, res) => {
+    try {
+      const sq = await storage.getSupplierQualification(req.params.id);
+      if (!sq) return res.status(404).json({ message: "Supplier qualification not found" });
+      res.json(sq);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch supplier qualification" });
+    }
+  });
+
+  app.put("/api/supplier-qualifications/:id", async (req, res) => {
+    try {
+      const data = insertSupplierQualificationSchema.partial().parse(req.body);
+      const sq = await storage.updateSupplierQualification(req.params.id, data);
+      if (!sq) return res.status(404).json({ message: "Supplier qualification not found" });
+      res.json(sq);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ message: formatZodError(err) });
+      }
+      res.status(500).json({ message: "Failed to update supplier qualification" });
+    }
+  });
+
+  // ─── Batch Production Records ────────────────────────────
+
+  app.post("/api/batch-production-records", async (req, res) => {
+    try {
+      const data = insertBprSchema.parse(req.body);
+      const bpr = await storage.createBpr(data);
+      res.status(201).json(bpr);
+    } catch (err) {
+      if (err instanceof ZodError) return res.status(400).json({ message: formatZodError(err) });
+      const msg = err instanceof Error ? err.message : "Failed to create BPR";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  app.get("/api/batch-production-records", async (req, res) => {
+    try {
+      const filters = {
+        status: req.query.status as string | undefined,
+        productionBatchId: req.query.productionBatchId as string | undefined,
+      };
+      const cleanFilters = Object.fromEntries(
+        Object.entries(filters).filter(([_, v]) => v !== undefined)
+      );
+      const bprs = await storage.getBprs(
+        Object.keys(cleanFilters).length > 0 ? cleanFilters : undefined
+      );
+      res.json(bprs);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch BPRs" });
+    }
+  });
+
+  // Must be before :id route
+  app.get("/api/batch-production-records/by-batch/:batchId", async (req, res) => {
+    try {
+      const bpr = await storage.getBprByBatchId(req.params.batchId);
+      if (!bpr) return res.status(404).json({ message: "BPR not found for this batch" });
+      res.json(bpr);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch BPR by batch ID" });
+    }
+  });
+
+  app.get("/api/batch-production-records/:id", async (req, res) => {
+    try {
+      const bpr = await storage.getBpr(req.params.id);
+      if (!bpr) return res.status(404).json({ message: "BPR not found" });
+      res.json(bpr);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch BPR" });
+    }
+  });
+
+  app.put("/api/batch-production-records/:id", async (req, res) => {
+    try {
+      const data = insertBprSchema.partial().parse(req.body);
+      const bpr = await storage.updateBpr(req.params.id, data);
+      if (!bpr) return res.status(404).json({ message: "BPR not found" });
+      res.json(bpr);
+    } catch (err) {
+      if (err instanceof ZodError) return res.status(400).json({ message: formatZodError(err) });
+      const msg = err instanceof Error ? err.message : "Failed to update BPR";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  app.post("/api/batch-production-records/:id/submit-for-review", async (req, res) => {
+    try {
+      const bpr = await storage.submitBprForReview(req.params.id);
+      if (!bpr) return res.status(404).json({ message: "BPR not found" });
+      res.json(bpr);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to submit BPR for review";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  app.post("/api/batch-production-records/:id/qc-review", async (req, res) => {
+    try {
+      const { disposition, reviewedBy, notes } = req.body;
+      if (!disposition || !reviewedBy) {
+        return res.status(400).json({ message: "disposition and reviewedBy are required" });
+      }
+      const bpr = await storage.qcReviewBpr(req.params.id, disposition, reviewedBy, notes);
+      if (!bpr) return res.status(404).json({ message: "BPR not found" });
+      res.json(bpr);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to QC review BPR";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  app.post("/api/batch-production-records/:id/steps", async (req, res) => {
+    try {
+      const data = insertBprStepSchema.parse(req.body);
+      const step = await storage.addBprStep(req.params.id, data);
+      res.status(201).json(step);
+    } catch (err) {
+      if (err instanceof ZodError) return res.status(400).json({ message: formatZodError(err) });
+      const msg = err instanceof Error ? err.message : "Failed to add BPR step";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  app.put("/api/batch-production-records/:id/steps/:stepId", async (req, res) => {
+    try {
+      const data = insertBprStepSchema.partial().parse(req.body);
+      const step = await storage.updateBprStep(req.params.id, req.params.stepId, data);
+      if (!step) return res.status(404).json({ message: "BPR step not found" });
+      res.json(step);
+    } catch (err) {
+      if (err instanceof ZodError) return res.status(400).json({ message: formatZodError(err) });
+      const msg = err instanceof Error ? err.message : "Failed to update BPR step";
+      res.status(400).json({ message: msg });
+    }
+  });
+
+  app.post("/api/batch-production-records/:id/deviations", async (req, res) => {
+    try {
+      const data = insertBprDeviationSchema.parse(req.body);
+      const deviation = await storage.addBprDeviation(req.params.id, data);
+      res.status(201).json(deviation);
+    } catch (err) {
+      if (err instanceof ZodError) return res.status(400).json({ message: formatZodError(err) });
+      const msg = err instanceof Error ? err.message : "Failed to add BPR deviation";
+      res.status(400).json({ message: msg });
     }
   });
 
