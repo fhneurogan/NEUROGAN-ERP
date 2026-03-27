@@ -172,7 +172,7 @@ function LogTransactionSheet({
         locationId: values.locationId,
         type: txType,
         quantity: String(qty),
-        uom: selectedProduct?.defaultUom ?? "kg",
+        uom: selectedProduct?.defaultUom ?? "g",
         productionBatchId: values.productionBatchId || null,
         notes: values.notes || null,
         performedBy: "admin",
@@ -562,7 +562,14 @@ export default function Transactions() {
                         <TableCell className="text-xs">{tx.uom}</TableCell>
                         <TableCell className="text-xs">{tx.locationName}</TableCell>
                         <TableCell className="text-xs font-mono">
-                          {tx.batchNumber ?? "—"}
+                          {tx.productionBatchId && tx.batchNumber ? (
+                            <span
+                              className="cursor-pointer hover:underline text-primary"
+                              onClick={(e) => { e.stopPropagation(); window.location.hash = `#/production?batch=${tx.productionBatchId}`; }}
+                            >
+                              {tx.batchNumber}
+                            </span>
+                          ) : (tx.batchNumber ?? "—")}
                         </TableCell>
                         <TableCell className="text-xs max-w-32 truncate" title={tx.notes ?? undefined}>
                           {tx.notes ?? "—"}

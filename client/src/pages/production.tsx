@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -149,136 +149,16 @@ function BatchListItem({
 
 // ── Create/Edit batch form schema ──
 
-const inputLineSchema = z.object({
-  productId: z.string().min(1, "Required"),
-  quantityUsed: z.string().min(1, "Required"),
-  uom: z.string().min(1, "Required"),
-});
-
 const createBatchSchema = z.object({
   batchNumber: z.string().min(1, "Batch number required"),
   productId: z.string().min(1, "Product required"),
   plannedQuantity: z.string().min(1, "Planned quantity required"),
-  outputUom: z.string().min(1, "UOM required"),
   startDate: z.string().optional(),
-  operatorName: z.string().optional(),
   notes: z.string().optional(),
-  inputs: z.array(inputLineSchema).min(1, "At least one input required"),
 });
 
 type CreateBatchForm = z.infer<typeof createBatchSchema>;
 
-// Helper: check if a product requires lot tracking
-function requiresLot(productId: string, products: Product[]): boolean {
-  const p = products.find(x => x.id === productId);
-  return !p || p.category !== "SECONDARY_PACKAGING";
-}
-
-// ── FIFO Allocation Breakdown ──
-
-function AllocationBreakdown({
-  allocations,
-  requested,
-  sufficient,
-  uom,
-  onOverride,
-}: {
-  allocations: FIFOAllocation[];
-  requested: number;
-  sufficient: boolean;
-  uom: string;
-  onOverride?: (allocs: FIFOAllocation[]) => void;
-}) {
-  const [editMode, setEditMode] = useState(false);
-  const [editAllocations, setEditAllocations] = useState<FIFOAllocation[]>(allocations);
-
-  useEffect(() => {
-    setEditAllocations(allocations);
-    setEditMode(false);
-  }, [allocations]);
-
-  const handleQtyChange = (idx: number, newQty: string) => {
-    const updated = [...editAllocations];
-    updated[idx] = { ...updated[idx], quantity: parseFloat(newQty) || 0 };
-    setEditAllocations(updated);
-  };
-
-  const handleSaveOverride = () => {
-    onOverride?.(editAllocations.filter(a => a.quantity > 0));
-    setEditMode(false);
-  };
-
-  const totalAllocated = (editMode ? editAllocations : allocations).reduce((s, a) => s + a.quantity, 0);
-
-  if (allocations.length === 0) {
-    return (
-      <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2" data-testid="alert-no-stock">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-        No stock available for this material
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground font-medium">FIFO Lot Breakdown</span>
-        <div className="flex items-center gap-2">
-          {!sufficient && (
-            <span className="text-xs text-red-600 dark:text-red-400 font-medium" data-testid="text-insufficient-stock">
-              Insufficient ({formatQty(totalAllocated)} of {formatQty(requested)} {uom})
-            </span>
-          )}
-          {onOverride && !editMode && (
-            <Button type="button" variant="ghost" size="sm" className="h-5 text-xs px-1.5" onClick={() => setEditMode(true)} data-testid="button-override-allocation">
-              Override
-            </Button>
-          )}
-          {editMode && (
-            <Button type="button" variant="ghost" size="sm" className="h-5 text-xs px-1.5" onClick={handleSaveOverride} data-testid="button-save-override">
-              Save
-            </Button>
-          )}
-        </div>
-      </div>
-      <div className="rounded-md border bg-muted/30 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="h-7">
-              <TableHead className="text-[10px] py-1">LOT #</TableHead>
-              <TableHead className="text-[10px] py-1">Location</TableHead>
-              <TableHead className="text-[10px] py-1">Expires</TableHead>
-              <TableHead className="text-[10px] py-1 text-right">Qty</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(editMode ? editAllocations : allocations).map((a, idx) => (
-              <TableRow key={`${a.lotId}-${a.locationId}`} className="h-7" data-testid={`row-allocation-${idx}`}>
-                <TableCell className="text-xs font-mono py-1">{a.lotNumber}</TableCell>
-                <TableCell className="text-xs py-1">{a.locationName}</TableCell>
-                <TableCell className="text-xs py-1">{a.expirationDate ?? "—"}</TableCell>
-                <TableCell className="text-xs py-1 text-right">
-                  {editMode ? (
-                    <Input
-                      type="number"
-                      step="any"
-                      value={a.quantity}
-                      onChange={e => handleQtyChange(idx, e.target.value)}
-                      className="h-5 w-20 text-xs ml-auto text-right"
-                      data-testid={`input-override-qty-${idx}`}
-                    />
-                  ) : (
-                    <span>{formatQty(a.quantity)}</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
 
 // ── Create/Edit Batch Sheet ──
 
@@ -301,8 +181,11 @@ function CreateBatchSheet({
   const today = new Date().toISOString().slice(0, 10);
   const isEditMode = editBatch !== null;
 
-  // FIFO allocations state: maps input index → allocations
+  // FIFO allocations state: maps recipe line index → allocations
   const [allocationsMap, setAllocationsMap] = useState<Map<number, { allocations: FIFOAllocation[]; sufficient: boolean; requested: number }>>(new Map());
+
+  // Override quantities per recipe line (index → custom qty string)
+  const [overrides, setOverrides] = useState<Map<number, string>>(new Map());
 
   // Fetch next batch number
   const [nextBatchNumber, setNextBatchNumber] = useState<string>("");
@@ -331,34 +214,13 @@ function CreateBatchSheet({
     [products]
   );
 
-  // All non-finished-good products that have stock (or are secondary packaging)
-  const materialProducts = useMemo(() => {
-    const invProductIds = new Set(inventory.map(i => i.productId));
-    return products.filter(p => {
-      if (p.category === "FINISHED_GOOD") return false;
-      // Show if it has inventory OR is secondary packaging
-      return invProductIds.has(p.id) || p.category === "SECONDARY_PACKAGING";
-    });
-  }, [products, inventory]);
-
-  const defaultInputs = isEditMode && editBatch
-    ? editBatch.inputs.map(inp => ({
-        productId: inp.productId,
-        quantityUsed: inp.quantityUsed,
-        uom: inp.uom,
-      }))
-    : [{ productId: "", quantityUsed: "", uom: "" }];
-
   const form = useForm<CreateBatchForm>({
     defaultValues: {
       batchNumber: isEditMode ? editBatch?.batchNumber ?? "" : "",
       productId: isEditMode ? editBatch?.productId ?? "" : "",
       plannedQuantity: isEditMode ? editBatch?.plannedQuantity ?? "" : "",
-      outputUom: isEditMode ? editBatch?.outputUom ?? "pcs" : "pcs",
       startDate: isEditMode ? editBatch?.startDate ?? today : today,
-      operatorName: isEditMode ? editBatch?.operatorName ?? "" : "",
       notes: isEditMode ? editBatch?.notes ?? "" : "",
-      inputs: defaultInputs,
     },
   });
 
@@ -366,42 +228,28 @@ function CreateBatchSheet({
   useEffect(() => {
     if (open) {
       setAllocationsMap(new Map());
+      setOverrides(new Map());
       if (isEditMode && editBatch) {
         form.reset({
           batchNumber: editBatch.batchNumber,
           productId: editBatch.productId,
           plannedQuantity: editBatch.plannedQuantity,
-          outputUom: editBatch.outputUom ?? "pcs",
           startDate: editBatch.startDate ?? today,
-          operatorName: editBatch.operatorName ?? "",
           notes: editBatch.notes ?? "",
-          inputs: editBatch.inputs.map(inp => ({
-            productId: inp.productId,
-            quantityUsed: inp.quantityUsed,
-            uom: inp.uom,
-          })),
         });
       } else {
         form.reset({
           batchNumber: "",
           productId: "",
           plannedQuantity: "",
-          outputUom: "pcs",
           startDate: today,
-          operatorName: "",
           notes: "",
-          inputs: [{ productId: "", quantityUsed: "", uom: "" }],
         });
       }
     }
   }, [open, editBatch?.id]);
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "inputs",
-  });
-
-  // Fetch FIFO allocation when material + qty change
+  // Fetch FIFO allocation for a recipe line
   const fetchFIFOAllocation = useCallback(async (index: number, productId: string, quantity: string) => {
     if (!productId || !quantity || parseFloat(quantity) <= 0) {
       setAllocationsMap(prev => {
@@ -436,7 +284,7 @@ function CreateBatchSheet({
     }
   }, [products]);
 
-  // ── Recipe auto-populate ──
+  // ── Recipe lookup ──
   const selectedProductId = form.watch("productId");
   const { data: recipesData } = useQuery<RecipeWithDetails[]>({
     queryKey: ["/api/recipes", selectedProductId],
@@ -448,52 +296,65 @@ function CreateBatchSheet({
     enabled: !!selectedProductId,
   });
   const recipe = recipesData?.[0]; // First recipe for this product
+  const hasRecipe = !!recipe;
 
-  // Auto-populate inputs from recipe when product is selected (create mode only)
-  useEffect(() => {
-    if (!recipe || isEditMode) return;
-    const plannedQty = parseFloat(form.getValues("plannedQuantity")) || 1;
-    const newInputs = recipe.lines.map(line => ({
-      productId: line.productId,
-      quantityUsed: String(Math.round(parseFloat(line.quantity) * plannedQty * 1000000) / 1000000),
-      uom: line.uom,
-    }));
-    if (newInputs.length > 0) {
-      form.setValue("inputs", newInputs);
-      // Trigger FIFO allocation for each auto-populated input
-      newInputs.forEach((inp, i) => {
-        if (inp.productId && inp.quantityUsed && parseFloat(inp.quantityUsed) > 0) {
-          fetchFIFOAllocation(i, inp.productId, inp.quantityUsed);
-        }
-      });
-    }
-  }, [recipe?.id, selectedProductId]);
-
-  // Recalculate input quantities when planned quantity changes and recipe is loaded
+  // Compute effective quantities for each recipe line based on planned qty and overrides
   const plannedQuantity = form.watch("plannedQuantity");
+  const recipeLines = useMemo(() => {
+    if (!recipe) return [];
+    const plannedQty = parseFloat(plannedQuantity) || 1;
+    return recipe.lines.map((line, idx) => {
+      const recipeQty = String(Math.round(parseFloat(line.quantity) * plannedQty * 1000000) / 1000000);
+      const overrideQty = overrides.get(idx);
+      const effectiveQty = overrideQty !== undefined && overrideQty !== "" ? overrideQty : recipeQty;
+      return {
+        ...line,
+        recipeQty,
+        effectiveQty,
+        isOverridden: overrideQty !== undefined && overrideQty !== "",
+      };
+    });
+  }, [recipe, plannedQuantity, overrides]);
+
+  // Trigger FIFO allocations when recipe lines or quantities change
   useEffect(() => {
-    if (!recipe || isEditMode) return;
-    const qty = parseFloat(plannedQuantity);
-    if (!qty || qty <= 0) return;
-    const updatedInputs = recipe.lines.map(line => ({
-      productId: line.productId,
-      quantityUsed: String(Math.round(parseFloat(line.quantity) * qty * 1000000) / 1000000),
-      uom: line.uom,
-    }));
-    if (updatedInputs.length > 0) {
-      form.setValue("inputs", updatedInputs);
-      // Trigger FIFO allocation for each updated input
-      updatedInputs.forEach((inp, i) => {
-        if (inp.productId && inp.quantityUsed && parseFloat(inp.quantityUsed) > 0) {
-          fetchFIFOAllocation(i, inp.productId, inp.quantityUsed);
-        }
-      });
+    if (!recipe || recipeLines.length === 0) return;
+    recipeLines.forEach((line, idx) => {
+      if (line.productId && parseFloat(line.effectiveQty) > 0) {
+        fetchFIFOAllocation(idx, line.productId, line.effectiveQty);
+      }
+    });
+  }, [recipeLines.map(l => `${l.productId}:${l.effectiveQty}`).join(",")]);
+
+  // In edit mode, load existing inputs into overrides map if they differ from recipe
+  useEffect(() => {
+    if (!isEditMode || !editBatch || !recipe) return;
+    const plannedQty = parseFloat(editBatch.plannedQuantity) || 1;
+    const newOverrides = new Map<number, string>();
+
+    // Group edit batch inputs by productId to sum quantities
+    const inputQtyByProduct = new Map<string, number>();
+    for (const inp of editBatch.inputs) {
+      inputQtyByProduct.set(inp.productId, (inputQtyByProduct.get(inp.productId) ?? 0) + parseFloat(inp.quantityUsed));
     }
-  }, [plannedQuantity, recipe?.id]);
+
+    recipe.lines.forEach((line, idx) => {
+      const recipeExpected = Math.round(parseFloat(line.quantity) * plannedQty * 1000000) / 1000000;
+      const actualQty = inputQtyByProduct.get(line.productId);
+      if (actualQty !== undefined && Math.abs(actualQty - recipeExpected) > 0.0001) {
+        newOverrides.set(idx, String(actualQty));
+      }
+    });
+    setOverrides(newOverrides);
+  }, [isEditMode, editBatch?.id, recipe?.id]);
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateBatchForm) => {
-      // Build final inputs from FIFO allocations
+      if (!recipe) {
+        throw new Error("Cannot create batch without a recipe. Please select a product that has a recipe defined.");
+      }
+
+      // Build final inputs from recipe lines + FIFO allocations
       const finalInputs: Array<{
         productId: string;
         lotId: string;
@@ -502,35 +363,31 @@ function CreateBatchSheet({
         uom: string;
       }> = [];
 
-      for (let i = 0; i < data.inputs.length; i++) {
-        const inp = data.inputs[i];
-        if (!inp.productId) continue;
-
-        const prod = products.find(p => p.id === inp.productId);
+      for (let i = 0; i < recipeLines.length; i++) {
+        const line = recipeLines[i];
+        const prod = products.find(p => p.id === line.productId);
         const isSecondary = prod?.category === "SECONDARY_PACKAGING";
 
         if (isSecondary) {
-          // Secondary packaging — no lot/location needed
           finalInputs.push({
-            productId: inp.productId,
+            productId: line.productId,
             lotId: "",
             locationId: "",
-            quantityUsed: inp.quantityUsed,
-            uom: inp.uom,
+            quantityUsed: line.effectiveQty,
+            uom: line.uom,
           });
         } else {
-          // Use FIFO allocations — each allocation becomes a separate input line
           const allocData = allocationsMap.get(i);
           if (!allocData || allocData.allocations.length === 0) {
-            throw new Error(`No stock allocation for ${prod?.name ?? "material"}. Please enter a quantity to trigger allocation.`);
+            throw new Error(`No stock allocation for ${prod?.name ?? "material"}. Stock may not be available.`);
           }
           for (const alloc of allocData.allocations) {
             finalInputs.push({
-              productId: inp.productId,
+              productId: line.productId,
               lotId: alloc.lotId,
               locationId: alloc.locationId,
               quantityUsed: String(alloc.quantity),
-              uom: alloc.uom,
+              uom: line.uom,
             });
           }
         }
@@ -544,9 +401,9 @@ function CreateBatchSheet({
         batchNumber: data.batchNumber,
         productId: data.productId,
         plannedQuantity: data.plannedQuantity,
-        outputUom: data.outputUom,
+        outputUom: "units",
         startDate: data.startDate || null,
-        operatorName: data.operatorName || null,
+        operatorName: "Eric",
         notes: data.notes || null,
         inputs: finalInputs,
       };
@@ -565,6 +422,7 @@ function CreateBatchSheet({
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
       form.reset();
       setAllocationsMap(new Map());
+      setOverrides(new Map());
       onOpenChange(false);
       toast({ title: isEditMode ? "Batch updated" : "Batch record created" });
     },
@@ -574,23 +432,39 @@ function CreateBatchSheet({
   });
 
   function onSubmit(data: CreateBatchForm) {
-    // Pre-submit validation: check that all non-secondary inputs have sufficient stock
-    for (let i = 0; i < data.inputs.length; i++) {
-      const inp = data.inputs[i];
-      if (!inp.productId) continue;
-      const prod = products.find(p => p.id === inp.productId);
+    if (!hasRecipe) {
+      toast({
+        title: "No Recipe Found",
+        description: "Cannot create a batch without a recipe. Please define a recipe for this product first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Pre-submit validation: check all non-secondary lines have sufficient stock
+    for (let i = 0; i < recipeLines.length; i++) {
+      const line = recipeLines[i];
+      const prod = products.find(p => p.id === line.productId);
       if (prod?.category === "SECONDARY_PACKAGING") continue;
       const allocData = allocationsMap.get(i);
       if (allocData && !allocData.sufficient) {
         toast({
           title: "Insufficient Stock",
-          description: `${prod?.name ?? "Material"} does not have enough stock. Available: ${formatQty(allocData.allocations.reduce((s, a) => s + a.quantity, 0))} ${inp.uom}, Needed: ${inp.quantityUsed} ${inp.uom}`,
+          description: `${prod?.name ?? "Material"} does not have enough stock. Available: ${formatQty(allocData.allocations.reduce((s, a) => s + a.quantity, 0))} ${line.uom}, Needed: ${line.effectiveQty} ${line.uom}`,
           variant: "destructive",
         });
         return;
       }
     }
     createMutation.mutate(data);
+  }
+
+  // Stock status helper for a recipe line
+  function stockStatus(index: number): { label: string; color: string } {
+    const allocData = allocationsMap.get(index);
+    if (!allocData) return { label: "—", color: "text-muted-foreground" };
+    if (allocData.sufficient) return { label: "OK", color: "text-emerald-600 dark:text-emerald-400" };
+    const total = allocData.allocations.reduce((s, a) => s + a.quantity, 0);
+    return { label: `Low (${formatQty(total)})`, color: "text-red-600 dark:text-red-400" };
   }
 
   return (
@@ -645,7 +519,15 @@ function CreateBatchSheet({
               )}
             />
 
-            {/* Planned qty + UOM */}
+            {/* No recipe warning */}
+            {selectedProductId && !hasRecipe && recipesData !== undefined && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2" data-testid="warning-no-recipe">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>No recipe found for this product. A recipe is required to create a batch.</span>
+              </div>
+            )}
+
+            {/* Planned qty + fixed Output UOM */}
             <div className="grid grid-cols-2 gap-3">
               <FormField
                 control={form.control}
@@ -660,28 +542,12 @@ function CreateBatchSheet({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="outputUom"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Output UOM</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-output-uom">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {["kg", "g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"].map(u => (
-                          <SelectItem key={u} value={u}>{u}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-1">
+                <Label className="text-sm text-muted-foreground">Output UOM</Label>
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-muted/50" data-testid="display-output-uom">
+                  <span className="text-sm font-medium">units</span>
+                </div>
+              </div>
             </div>
 
             {/* Start Date */}
@@ -699,20 +565,13 @@ function CreateBatchSheet({
               )}
             />
 
-            {/* Operator */}
-            <FormField
-              control={form.control}
-              name="operatorName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Operator Name</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder="Operator name..." data-testid="input-operator" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Operator — fixed to "Eric" */}
+            <div className="space-y-1">
+              <Label className="text-sm text-muted-foreground">Operator</Label>
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-muted/50" data-testid="display-operator">
+                <span className="text-sm font-medium">Eric</span>
+              </div>
+            </div>
 
             {/* Notes */}
             <FormField
@@ -729,211 +588,152 @@ function CreateBatchSheet({
               )}
             />
 
-            {/* Input Materials — New FIFO-based workflow */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
+            {/* Recipe Materials Table */}
+            {hasRecipe && recipeLines.length > 0 && (
+              <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Label className="text-sm font-medium">Input Materials</Label>
+                  <Label className="text-sm font-medium">Recipe: {recipe!.name}</Label>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-xs">
-                        <p className="text-xs">Select a material and enter the quantity needed. The system will auto-assign lots using FIFO (earliest expiration first). You can override the allocation if needed.</p>
+                        <p className="text-xs">Materials are auto-populated from the recipe. Quantities scale with planned output. Click a qty to override it. FIFO lot assignment is automatic.</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => append({ productId: "", quantityUsed: "", uom: "" })}
-                  data-testid="button-add-input"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add Input
-                </Button>
+                <Card>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10 text-xs">#</TableHead>
+                        <TableHead className="text-xs">Material</TableHead>
+                        <TableHead className="text-xs">SKU</TableHead>
+                        <TableHead className="text-xs text-right">Qty Needed</TableHead>
+                        <TableHead className="text-xs">UOM</TableHead>
+                        <TableHead className="text-xs">LOT# (FIFO)</TableHead>
+                        <TableHead className="text-xs text-center">Stock</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recipeLines.map((line, idx) => {
+                        const allocData = allocationsMap.get(idx);
+                        const lotDisplay = allocData && allocData.allocations.length > 0
+                          ? allocData.allocations.map(a => a.lotNumber).join(", ")
+                          : "—";
+                        const status = stockStatus(idx);
+                        const isSecondary = products.find(p => p.id === line.productId)?.category === "SECONDARY_PACKAGING";
+
+                        return (
+                          <TableRow key={line.id || idx} data-testid={`row-recipe-line-${idx}`}>
+                            <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell className="text-xs font-medium">{line.productName}</TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground">{line.productSku}</TableCell>
+                            <TableCell className="text-right">
+                              {line.isOverridden ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <Input
+                                    type="number"
+                                    step="any"
+                                    value={overrides.get(idx) ?? ""}
+                                    onChange={e => {
+                                      setOverrides(prev => {
+                                        const next = new Map(prev);
+                                        if (e.target.value === "") {
+                                          next.delete(idx);
+                                        } else {
+                                          next.set(idx, e.target.value);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                    className="h-6 w-20 text-xs text-right"
+                                    data-testid={`input-override-qty-${idx}`}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5"
+                                    onClick={() => {
+                                      setOverrides(prev => {
+                                        const next = new Map(prev);
+                                        next.delete(idx);
+                                        return next;
+                                      });
+                                    }}
+                                    data-testid={`button-clear-override-${idx}`}
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="text-xs hover:underline cursor-pointer tabular-nums"
+                                  onClick={() => {
+                                    setOverrides(prev => {
+                                      const next = new Map(prev);
+                                      next.set(idx, line.recipeQty);
+                                      return next;
+                                    });
+                                  }}
+                                  data-testid={`button-edit-qty-${idx}`}
+                                >
+                                  {formatQty(parseFloat(line.recipeQty))}
+                                </button>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs">{line.uom}</TableCell>
+                            <TableCell className="text-xs font-mono">
+                              {isSecondary ? (
+                                <span className="text-muted-foreground italic">N/A</span>
+                              ) : (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-help">{lotDisplay}</span>
+                                    </TooltipTrigger>
+                                    {allocData && allocData.allocations.length > 0 && (
+                                      <TooltipContent side="bottom" className="max-w-sm">
+                                        <div className="text-xs space-y-1">
+                                          {allocData.allocations.map((a, ai) => (
+                                            <div key={ai} className="flex justify-between gap-4">
+                                              <span>{a.lotNumber} @ {a.locationName}</span>
+                                              <span className="font-mono">{formatQty(a.quantity)} {line.uom}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {isSecondary ? (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              ) : (
+                                <span className={`text-xs font-medium ${status.color}`} data-testid={`text-stock-status-${idx}`}>
+                                  {status.label}
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </Card>
               </div>
-
-              {fields.map((field, index) => {
-                const watchedMaterialId = form.watch(`inputs.${index}.productId`);
-                const watchedQty = form.watch(`inputs.${index}.quantityUsed`);
-                const watchedUom = form.watch(`inputs.${index}.uom`);
-                const isSecondaryPackaging = !requiresLot(watchedMaterialId, products);
-                const allocData = allocationsMap.get(index);
-
-                return (
-                  <Card key={field.id} className="relative">
-                    <CardContent className="pt-4 pb-3 px-3 space-y-2">
-                      {fields.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute top-2 right-2 h-6 w-6"
-                          onClick={() => {
-                            remove(index);
-                            setAllocationsMap(prev => {
-                              const next = new Map(prev);
-                              next.delete(index);
-                              // Re-index remaining allocations
-                              const reindexed = new Map<number, typeof allocData>();
-                              for (const [k, v] of next) {
-                                reindexed.set(k > index ? k - 1 : k, v!);
-                              }
-                              return reindexed as typeof prev;
-                            });
-                          }}
-                          data-testid={`button-remove-input-${index}`}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      )}
-
-                      {/* Material select */}
-                      <FormField
-                        control={form.control}
-                        name={`inputs.${index}.productId`}
-                        render={({ field: f }) => (
-                          <FormItem>
-                            <FormLabel className="text-xs">Material</FormLabel>
-                            <Select
-                              onValueChange={(val) => {
-                                f.onChange(val);
-                                // Auto-fill UOM from the product's default
-                                const prod = products.find(p => p.id === val);
-                                if (prod) form.setValue(`inputs.${index}.uom`, prod.defaultUom);
-                                // Clear allocation for this index
-                                setAllocationsMap(prev => {
-                                  const next = new Map(prev);
-                                  next.delete(index);
-                                  return next;
-                                });
-                                // Trigger FIFO allocation if qty already set
-                                const currentQty = form.getValues(`inputs.${index}.quantityUsed`);
-                                if (currentQty && parseFloat(currentQty) > 0) {
-                                  fetchFIFOAllocation(index, val, currentQty);
-                                }
-                              }}
-                              value={f.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger data-testid={`select-input-material-${index}`}>
-                                  <SelectValue placeholder="Select material..." />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {materialProducts.map(p => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.name} ({p.sku})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {/* Quantity */}
-                        <FormField
-                          control={form.control}
-                          name={`inputs.${index}.quantityUsed`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Qty Needed</FormLabel>
-                              <FormControl>
-                                <Input
-                                  {...f}
-                                  type="number"
-                                  step="any"
-                                  placeholder="0"
-                                  data-testid={`input-qty-used-${index}`}
-                                  onBlur={(e) => {
-                                    f.onBlur();
-                                    // Trigger FIFO allocation on blur
-                                    if (watchedMaterialId && e.target.value) {
-                                      fetchFIFOAllocation(index, watchedMaterialId, e.target.value);
-                                    }
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault();
-                                      if (watchedMaterialId && f.value) {
-                                        fetchFIFOAllocation(index, watchedMaterialId, f.value);
-                                      }
-                                    }
-                                  }}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* UOM */}
-                        <FormField
-                          control={form.control}
-                          name={`inputs.${index}.uom`}
-                          render={({ field: f }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">UOM</FormLabel>
-                              <Select onValueChange={f.onChange} value={f.value}>
-                                <FormControl>
-                                  <SelectTrigger data-testid={`select-input-uom-${index}`}>
-                                    <SelectValue placeholder="UOM" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {["kg", "g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"].map(u => (
-                                    <SelectItem key={u} value={u}>{u}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-
-                      {/* FIFO Allocation Breakdown — shown for non-secondary-packaging materials */}
-                      {!isSecondaryPackaging && allocData && (
-                        <AllocationBreakdown
-                          allocations={allocData.allocations}
-                          requested={allocData.requested}
-                          sufficient={allocData.sufficient}
-                          uom={watchedUom}
-                          onOverride={(overridden) => {
-                            setAllocationsMap(prev => {
-                              const next = new Map(prev);
-                              const totalAlloc = overridden.reduce((s, a) => s + a.quantity, 0);
-                              next.set(index, {
-                                allocations: overridden,
-                                sufficient: totalAlloc >= allocData.requested,
-                                requested: allocData.requested,
-                              });
-                              return next;
-                            });
-                          }}
-                        />
-                      )}
-
-                      {isSecondaryPackaging && (
-                        <p className="text-[10px] text-muted-foreground">Secondary packaging — no lot tracking required</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+            )}
 
             <Button
               type="submit"
               className="w-full"
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || (!!selectedProductId && !hasRecipe)}
               data-testid="button-submit-batch"
             >
               {createMutation.isPending
@@ -1353,7 +1153,15 @@ function BatchDetail({
             <h2 className="text-lg font-semibold" data-testid="text-detail-batch-number">{batch.batchNumber}</h2>
             {statusBadge(batch.status)}
           </div>
-          <p className="text-sm text-muted-foreground mt-1" data-testid="text-detail-product">{batch.productName} ({batch.productSku})</p>
+          <p className="text-sm text-muted-foreground mt-1" data-testid="text-detail-product">
+            <span
+              className="cursor-pointer hover:underline text-primary"
+              onClick={() => { window.location.hash = `#/supply-chain?product=${batch.productId}`; }}
+            >
+              {batch.productName}
+            </span>{" "}
+            ({batch.productSku})
+          </p>
         </div>
       </div>
 
@@ -1550,7 +1358,14 @@ function BatchDetail({
               ) : (
                 batch.inputs.map(input => (
                   <TableRow key={input.id} data-testid={`row-input-${input.id}`}>
-                    <TableCell className="text-sm">{input.productName}</TableCell>
+                    <TableCell className="text-sm">
+                      <span
+                        className="cursor-pointer hover:underline text-primary"
+                        onClick={(e) => { e.stopPropagation(); window.location.hash = `#/inventory?material=${input.productId}`; }}
+                      >
+                        {input.productName}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-sm font-mono">{input.lotNumber}</TableCell>
                     <TableCell className="text-sm">{input.locationName}</TableCell>
                     <TableCell className="text-right text-sm">{formatQty(input.quantityUsed)}</TableCell>
@@ -1572,7 +1387,11 @@ function BatchDetail({
 // ── Main Production Page ──
 
 export default function Production() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Read batch ID from URL params (hash routing: /#/production?batch=xxx)
+  const searchParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const urlBatchId = searchParams.get("batch");
+
+  const [selectedId, setSelectedId] = useState<string | null>(urlBatchId);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [editBatch, setEditBatch] = useState<ProductionBatchWithDetails | null>(null);

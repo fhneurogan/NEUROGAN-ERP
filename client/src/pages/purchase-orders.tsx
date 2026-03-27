@@ -143,7 +143,14 @@ function DetailPanel({
             <h2 className="text-lg font-semibold font-mono">{po.poNumber}</h2>
             {statusBadge(po.status)}
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">{po.supplierName}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            <span
+              className="cursor-pointer hover:underline text-primary"
+              onClick={() => { window.location.hash = `#/suppliers?supplier=${po.supplierId}`; }}
+            >
+              {po.supplierName}
+            </span>
+          </p>
         </div>
         <div className="flex gap-2 shrink-0">
           {po.status === "DRAFT" && (
@@ -263,7 +270,14 @@ function DetailPanel({
                     return (
                       <TableRow key={li.id} data-testid={`row-line-item-${li.id}`}>
                         <TableCell>
-                          <div className="text-sm font-medium">{li.productName}</div>
+                          <div className="text-sm font-medium">
+                            <span
+                              className="cursor-pointer hover:underline text-primary"
+                              onClick={(e) => { e.stopPropagation(); window.location.hash = `#/inventory?material=${li.productId}`; }}
+                            >
+                              {li.productName}
+                            </span>
+                          </div>
                           <div className="text-xs font-mono text-muted-foreground">{li.productSku}</div>
                         </TableCell>
                         <TableCell className="text-sm text-right tabular-nums font-medium">
@@ -362,7 +376,7 @@ function parseBulkText(text: string): ParsedLineItem[] {
     results.push({
       materialName: cols[0] || "",
       quantity: cols[1] || "0",
-      uom: cols[2] || "kg",
+      uom: cols[2] || "g",
       unitPrice: cols[3] || "",
     });
   }
@@ -429,7 +443,7 @@ function CreatePOSheet({
   const [newMaterialName, setNewMaterialName] = useState("");
   const [newMaterialSku, setNewMaterialSku] = useState("");
   const [newMaterialCategory, setNewMaterialCategory] = useState("ACTIVE_INGREDIENT");
-  const [newMaterialUom, setNewMaterialUom] = useState("kg");
+  const [newMaterialUom, setNewMaterialUom] = useState("g");
   const [creatingMaterial, setCreatingMaterial] = useState(false);
 
   const CATEGORIES = [
@@ -438,7 +452,7 @@ function CreatePOSheet({
     { value: "PRIMARY_PACKAGING", label: "Primary Packaging" },
     { value: "SECONDARY_PACKAGING", label: "Secondary Packaging" },
   ];
-  const UOMS = ["kg", "g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"];
+  const UOMS = ["g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"];
 
   const handleCreateMaterial = async () => {
     if (!newMaterialName.trim() || !newMaterialSku.trim()) return;
@@ -462,7 +476,7 @@ function CreatePOSheet({
       setNewMaterialName("");
       setNewMaterialSku("");
       setNewMaterialCategory("ACTIVE_INGREDIENT");
-      setNewMaterialUom("kg");
+      setNewMaterialUom("g");
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -512,7 +526,7 @@ function CreatePOSheet({
       orderDate: new Date().toISOString().slice(0, 10),
       expectedDeliveryDate: "",
       notes: "",
-      lineItems: [{ productId: "", quantityOrdered: "", uom: "kg", unitPrice: "", notes: "" }],
+      lineItems: [{ productId: "", quantityOrdered: "", uom: "g", unitPrice: "", notes: "" }],
     },
   });
 
@@ -581,14 +595,14 @@ function CreatePOSheet({
       return;
     }
 
-    const validUoms = ["kg", "g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"];
+    const validUoms = ["g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"];
     let matched = 0;
     let unmatched = 0;
     const newItems: CreatePOValues["lineItems"] = [];
 
     for (const item of parsed) {
       const product = matchProduct(item.materialName);
-      const uom = validUoms.includes(item.uom) ? item.uom : (product?.defaultUom ?? "kg");
+      const uom = validUoms.includes(item.uom) ? item.uom : (product?.defaultUom ?? "g");
       newItems.push({
         productId: product?.id ?? "",
         quantityOrdered: item.quantity,
@@ -755,7 +769,7 @@ function CreatePOSheet({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => append({ productId: "", quantityOrdered: "", uom: "kg", unitPrice: "", notes: "" })}
+                      onClick={() => append({ productId: "", quantityOrdered: "", uom: "g", unitPrice: "", notes: "" })}
                       data-testid="button-add-line-item"
                     >
                       <Plus className="h-3.5 w-3.5 mr-1" />
@@ -916,7 +930,7 @@ function CreatePOSheet({
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {["kg", "g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"].map((u) => (
+                                  {["g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"].map((u) => (
                                     <SelectItem key={u} value={u}>{u}</SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1363,8 +1377,8 @@ function ReceiveSheet({
 
 // ── Main Page ──
 
-export default function PurchaseOrders() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export default function PurchaseOrders({ initialSelectedId }: { initialSelectedId?: string | null }) {
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [statusFilter, setStatusFilter] = useState("");
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [receiveSheetOpen, setReceiveSheetOpen] = useState(false);
