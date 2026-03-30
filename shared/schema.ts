@@ -198,6 +198,7 @@ export const appSettings = pgTable("app_settings", {
   batchNumberPrefix: text("batch_number_prefix").notNull().default("BATCH"),
   autoGenerateLotNumbers: text("auto_generate_lot_numbers").notNull().default("true"),
   lotNumberPrefix: text("lot_number_prefix").notNull().default("LOT"),
+  fgLotNumberPrefix: text("fg_lot_number_prefix").notNull().default("FG"),
   skuPrefixRawMaterial: text("sku_prefix_raw_material").notNull().default("RA"),
   skuPrefixFinishedGood: text("sku_prefix_finished_good").notNull().default("US"),
   updatedAt: timestamp("updated_at").defaultNow(),
