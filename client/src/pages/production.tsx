@@ -59,6 +59,7 @@ import {
 import { Plus, Trash2, Beaker, Play, CheckCircle, Pause, RotateCcw, Pencil, XCircle, AlertTriangle, Info, MessageSquare, Send, ClipboardCheck, Printer } from "lucide-react";
 import { Link } from "wouter";
 import { formatQty } from "@/lib/formatQty";
+import { formatDateTime } from "@/lib/formatDate";
 import type {
   ProductionBatchWithDetails,
   Product,
@@ -798,9 +799,7 @@ function BatchNotes({ batchId }: { batchId: string }) {
   });
 
   function formatTimestamp(dateStr: string) {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) +
-      " " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return formatDateTime(dateStr);
   }
 
   return (

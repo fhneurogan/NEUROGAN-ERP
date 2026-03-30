@@ -20,6 +20,7 @@ import {
   AlertTriangle as AlertTriangleIcon,
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
+import { formatDate } from "@/lib/formatDate";
 import { Link, useLocation } from "wouter";
 
 // ─── Types ───────────────────────────────────────────
@@ -351,7 +352,7 @@ export default function Dashboard() {
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {po.expectedDeliveryDate
-                            ? `ETA: ${new Date(po.expectedDeliveryDate).toLocaleDateString()}`
+                            ? `ETA: ${formatDate(po.expectedDeliveryDate)}`
                             : "No ETA"}
                         </span>
                       </div>
@@ -517,7 +518,7 @@ export default function Dashboard() {
                         data-testid={`row-transaction-${tx.id}`}
                       >
                         <TableCell className="text-xs whitespace-nowrap">
-                          {new Date(tx.createdAt).toLocaleDateString()}
+                          {formatDate(tx.createdAt)}
                         </TableCell>
                         <TableCell>{typeBadge(tx.type)}</TableCell>
                         <TableCell className="text-xs truncate max-w-[120px]">{tx.productName}</TableCell>

@@ -3,6 +3,7 @@ import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { formatQty } from "@/lib/formatQty";
+import { formatDate } from "@/lib/formatDate";
 import type {
   ProductionBatchWithDetails,
   RecipeWithDetails,
@@ -115,11 +116,7 @@ export default function BatchPrint() {
     ? batch.notes.split("\n").filter((line: string) => line.trim() !== "")
     : [];
 
-  const today = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const today = formatDate(new Date());
 
   return (
     <>

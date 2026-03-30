@@ -57,6 +57,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatDate } from "@/lib/formatDate";
 import { useToast } from "@/hooks/use-toast";
 import type { Supplier, SupplierDocument, SupplierQualificationWithDetails } from "@shared/schema";
 import PurchaseOrders from "./purchase-orders";
@@ -421,7 +422,7 @@ function DocumentList({ supplierId }: { supplierId: string }) {
                     {doc.fileSize ? formatFileSize(Number(doc.fileSize)) : "—"}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : "—"}
+                    {formatDate(doc.uploadedAt)}
                   </span>
                 </div>
               </div>
@@ -890,7 +891,7 @@ function SupplierDetail({
           <div>
             <p className="text-xs font-medium text-muted-foreground">Created</p>
             <p className="text-sm text-muted-foreground">
-              {supplier.createdAt ? new Date(supplier.createdAt).toLocaleDateString() : "—"}
+              {formatDate(supplier.createdAt)}
             </p>
           </div>
         </div>

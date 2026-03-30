@@ -44,6 +44,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus } from "lucide-react";
 import type { Product, Lot, Location } from "@shared/schema";
 import { formatQty } from "@/lib/formatQty";
+import { formatDate } from "@/lib/formatDate";
 
 interface TransactionWithDetails {
   id: string;
@@ -545,7 +546,7 @@ export default function Transactions() {
                     return (
                       <TableRow key={tx.id} data-testid={`row-transaction-${tx.id}`}>
                         <TableCell className="text-xs whitespace-nowrap">
-                          {new Date(tx.createdAt).toLocaleDateString()}
+                          {formatDate(tx.createdAt)}
                         </TableCell>
                         <TableCell>{typeBadge(tx.type)}</TableCell>
                         <TableCell className="text-xs">{tx.productName}</TableCell>

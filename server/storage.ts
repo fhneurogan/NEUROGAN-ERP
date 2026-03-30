@@ -1281,6 +1281,7 @@ export class MemStorage implements IStorage {
         quantityReceived: li.quantityReceived ?? "0",
         unitPrice: li.unitPrice ?? null,
         uom: li.uom,
+        lotNumber: li.lotNumber ?? null,
         notes: li.notes ?? null,
       };
       this.poLineItems.set(liId, lineItem);

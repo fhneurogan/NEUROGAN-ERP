@@ -66,6 +66,7 @@ import {
   Check,
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
+import { formatDate } from "@/lib/formatDate";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type {
@@ -190,9 +191,7 @@ function LotTable({ lots }: { lots: InventoryGrouped["lots"] }) {
                     ))}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                    {lot.expirationDate
-                      ? new Date(lot.expirationDate).toLocaleDateString()
-                      : "—"}
+                    {formatDate(lot.expirationDate)}
                   </TableCell>
                 </TableRow>
               ))

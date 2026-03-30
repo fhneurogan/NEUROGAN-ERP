@@ -51,6 +51,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2, ClipboardList, PackageCheck, X, Send, Ban, Upload, ClipboardPaste, Download, FileSpreadsheet, UserPlus, PackagePlus } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
+import { formatDate } from "@/lib/formatDate";
 import type {
   PurchaseOrderWithDetails,
   POLineItemWithProduct,
@@ -107,7 +108,7 @@ function POListItem({
         </div>
         <div className="text-right shrink-0">
           <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {po.orderDate ? new Date(po.orderDate).toLocaleDateString() : po.createdAt ? new Date(po.createdAt).toLocaleDateString() : "—"}
+            {po.orderDate ? formatDate(po.orderDate) : formatDate(po.createdAt)}
           </span>
         </div>
       </div>
@@ -214,13 +215,13 @@ function DetailPanel({
       {/* Info row */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
         {po.orderDate && (
-          <span>Order Date: <span className="text-foreground">{new Date(po.orderDate).toLocaleDateString()}</span></span>
+          <span>Order Date: <span className="text-foreground">{formatDate(po.orderDate)}</span></span>
         )}
         {po.expectedDeliveryDate && (
-          <span>Expected: <span className="text-foreground">{new Date(po.expectedDeliveryDate).toLocaleDateString()}</span></span>
+          <span>Expected: <span className="text-foreground">{formatDate(po.expectedDeliveryDate)}</span></span>
         )}
         {po.createdAt && (
-          <span>Created: <span className="text-foreground">{new Date(po.createdAt).toLocaleDateString()}</span></span>
+          <span>Created: <span className="text-foreground">{formatDate(po.createdAt)}</span></span>
         )}
       </div>
 
@@ -412,6 +413,7 @@ const createPOSchema = z.object({
       quantityOrdered: z.string().min(1, "Quantity is required").refine((v) => parseFloat(v) > 0, "Must be positive"),
       uom: z.string().min(1, "UOM is required"),
       unitPrice: z.string().optional(),
+      lotNumber: z.string().optional(),
       notes: z.string().optional(),
     })
   ).min(1, "At least one line item is required"),
@@ -526,7 +528,7 @@ function CreatePOSheet({
       orderDate: new Date().toISOString().slice(0, 10),
       expectedDeliveryDate: "",
       notes: "",
-      lineItems: [{ productId: "", quantityOrdered: "", uom: "g", unitPrice: "", notes: "" }],
+      lineItems: [{ productId: "", quantityOrdered: "", uom: "g", unitPrice: "", lotNumber: "", notes: "" }],
     },
   });
 
@@ -548,6 +550,7 @@ function CreatePOSheet({
           quantityOrdered: li.quantityOrdered,
           uom: li.uom,
           unitPrice: li.unitPrice || null,
+          lotNumber: li.lotNumber || null,
           notes: li.notes || null,
         })),
       });
@@ -769,7 +772,7 @@ function CreatePOSheet({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => append({ productId: "", quantityOrdered: "", uom: "g", unitPrice: "", notes: "" })}
+                      onClick={() => append({ productId: "", quantityOrdered: "", uom: "g", unitPrice: "", lotNumber: "", notes: "" })}
                       data-testid="button-add-line-item"
                     >
                       <Plus className="h-3.5 w-3.5 mr-1" />
@@ -916,7 +919,7 @@ function CreatePOSheet({
                           </Button>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <FormField
                           control={form.control}
                           name={`lineItems.${index}.uom`}
@@ -935,6 +938,19 @@ function CreatePOSheet({
                                   ))}
                                 </SelectContent>
                               </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.lotNumber`}
+                          render={({ field: f }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">LOT#</FormLabel>
+                              <FormControl>
+                                <Input {...f} placeholder="Optional" data-testid={`input-line-lot-${index}`} />
+                              </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -1173,7 +1189,7 @@ function ReceiveSheet({
           alreadyReceived: received,
           remaining,
           quantity: String(remaining),
-          lotNumber: "",
+          lotNumber: li.lotNumber ?? "",
           locationId: "",
           expirationDate: "",
         };

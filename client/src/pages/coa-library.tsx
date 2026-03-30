@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatDateTime } from "@/lib/formatDate";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -441,7 +442,7 @@ function CoaDetail({
             {coa.qcReviewedAt && (
               <div className="text-sm">
                 <span className="text-muted-foreground">Reviewed At:</span>{" "}
-                <span data-testid="text-coa-qc-date">{new Date(coa.qcReviewedAt).toLocaleString()}</span>
+                <span data-testid="text-coa-qc-date">{formatDateTime(coa.qcReviewedAt)}</span>
               </div>
             )}
             {coa.qcNotes && (
