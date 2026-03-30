@@ -473,7 +473,7 @@ export default function Transactions() {
               <label className="text-xs font-medium text-muted-foreground">From</label>
               <DateInput
                 value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
+                onChange={setFilterDateFrom}
                 className="w-36 h-8 text-xs"
                 data-testid="filter-date-from"
               />
@@ -482,7 +482,7 @@ export default function Transactions() {
               <label className="text-xs font-medium text-muted-foreground">To</label>
               <DateInput
                 value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
+                onChange={setFilterDateTo}
                 className="w-36 h-8 text-xs"
                 data-testid="filter-date-to"
               />

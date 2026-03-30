@@ -730,7 +730,7 @@ function UploadCoaDialog({
               <Label className="text-sm font-medium">Analysis Date</Label>
               <DateInput
                 value={analysisDate}
-                onChange={(e) => setAnalysisDate(e.target.value)}
+                onChange={setAnalysisDate}
                 className="text-sm"
                 data-testid="input-coa-analysis-date"
               />

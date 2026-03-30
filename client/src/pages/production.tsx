@@ -1020,7 +1020,7 @@ function CompleteBatchDialog({
               <DateInput
                 id="output-exp"
                 value={outputExpirationDate}
-                onChange={e => setOutputExpirationDate(e.target.value)}
+                onChange={setOutputExpirationDate}
                 data-testid="input-output-expiration"
               />
             </div>
@@ -1042,7 +1042,7 @@ function CompleteBatchDialog({
               <DateInput
                 id="end-date"
                 value={endDate}
-                onChange={e => setEndDate(e.target.value)}
+                onChange={setEndDate}
                 data-testid="input-end-date"
               />
             </div>

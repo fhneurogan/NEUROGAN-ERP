@@ -576,7 +576,7 @@ function QualificationDialog({
             <Label className="text-sm">Qualification Date</Label>
             <DateInput
               value={qualificationDate}
-              onChange={(e) => handleDateChange(e.target.value)}
+              onChange={handleDateChange}
               className="text-sm"
               data-testid="input-qual-date"
             />
@@ -628,7 +628,7 @@ function QualificationDialog({
             <Label className="text-sm">Next Requalification Due</Label>
             <DateInput
               value={nextDue}
-              onChange={(e) => setNextDue(e.target.value)}
+              onChange={setNextDue}
               className="text-sm"
               data-testid="input-qual-next-due"
             />
