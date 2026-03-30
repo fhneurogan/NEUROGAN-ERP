@@ -524,7 +524,18 @@ function CreateBatchSheet({
             {selectedProductId && !hasRecipe && recipesData !== undefined && (
               <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2" data-testid="warning-no-recipe">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span>No recipe found for this product. A recipe is required to create a batch.</span>
+                <span>No recipe found for this product. </span>
+                <a
+                  href={`#/inventory?product=${selectedProductId}&openRecipe=true`}
+                  className="underline text-primary cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onOpenChange(false);
+                    window.location.hash = `#/inventory?product=${selectedProductId}&openRecipe=true`;
+                  }}
+                >
+                  Create one in Inventory →
+                </a>
               </div>
             )}
 

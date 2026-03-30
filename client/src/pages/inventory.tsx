@@ -692,15 +692,20 @@ const UOMS_MATERIAL = ["g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"];
 function CreateMaterialDialog({
   open,
   onOpenChange,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: (productId: string) => void;
 }) {
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
   const [category, setCategory] = useState("ACTIVE_INGREDIENT");
   const [uom, setUom] = useState("g");
+  const [lotNumber, setLotNumber] = useState("");
   const { toast } = useToast();
+
+  const lotRequired = ["ACTIVE_INGREDIENT", "SUPPORTING_INGREDIENT", "PRIMARY_PACKAGING"].includes(category);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -711,16 +716,27 @@ function CreateMaterialDialog({
         defaultUom: uom,
         status: "ACTIVE",
       });
-      return res.json();
+      const product = await res.json();
+      // Create lot if lotNumber is provided
+      if (lotNumber.trim()) {
+        await apiRequest("POST", "/api/lots", {
+          productId: product.id,
+          lotNumber: lotNumber.trim(),
+        });
+      }
+      return product;
     },
-    onSuccess: () => {
+    onSuccess: (product) => {
       queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/lots"] });
       toast({ title: "Material created" });
       setName("");
       setSku("");
       setCategory("ACTIVE_INGREDIENT");
       setUom("g");
+      setLotNumber("");
+      onCreated?.(product.id);
       onOpenChange(false);
     },
     onError: (err: Error) => {
@@ -771,6 +787,18 @@ function CreateMaterialDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="lot-number" className="text-sm">
+              Lot Number {lotRequired ? <span className="text-red-500">*</span> : "(optional)"}
+            </Label>
+            <Input
+              id="lot-number"
+              value={lotNumber}
+              onChange={(e) => setLotNumber(e.target.value)}
+              placeholder="e.g., 20250101"
+              data-testid="input-material-lot"
+            />
+          </div>
           <div className="space-y-2">
             <Label>Default UOM</Label>
             <Select value={uom} onValueChange={setUom}>
@@ -795,7 +823,7 @@ function CreateMaterialDialog({
           </Button>
           <Button
             onClick={() => mutation.mutate()}
-            disabled={!name.trim() || !sku.trim() || mutation.isPending}
+            disabled={!name.trim() || !sku.trim() || (lotRequired && !lotNumber.trim()) || mutation.isPending}
             data-testid="button-submit-create-material"
           >
             {mutation.isPending ? "Creating..." : "Create"}
@@ -1063,6 +1091,8 @@ function RecipeDialog({
       uom: l.uom,
     })) ?? [{ productId: "", quantity: "", uom: "g" }]
   );
+  const [createMaterialOpen, setCreateMaterialOpen] = useState(false);
+  const [addingForLineIndex, setAddingForLineIndex] = useState<number | null>(null);
   const { toast } = useToast();
 
   // Fetch non-finished-good products for material selector
@@ -1190,26 +1220,42 @@ function RecipeDialog({
                   {lines.map((line, idx) => (
                     <TableRow key={idx}>
                       <TableCell className="py-1.5">
-                        <Select
-                          value={line.productId}
-                          onValueChange={(v) =>
-                            updateLine(idx, "productId", v)
-                          }
-                        >
-                          <SelectTrigger
-                            className="h-8 text-sm"
-                            data-testid={`select-recipe-material-${idx}`}
+                        <div className="flex items-center gap-1">
+                          <Select
+                            value={line.productId}
+                            onValueChange={(v) =>
+                              updateLine(idx, "productId", v)
+                            }
                           >
-                            <SelectValue placeholder="Select material" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {materials.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.name} ({m.sku})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                            <SelectTrigger
+                              className="h-8 text-sm"
+                              data-testid={`select-recipe-material-${idx}`}
+                            >
+                              <SelectValue placeholder="Select material" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {materials.map((m) => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  {m.name} ({m.sku})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs shrink-0"
+                            onClick={() => {
+                              setAddingForLineIndex(idx);
+                              setCreateMaterialOpen(true);
+                            }}
+                            data-testid={`button-new-material-${idx}`}
+                          >
+                            <Plus className="h-3 w-3 mr-0.5" />
+                            New
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell className="py-1.5">
                         <Input
@@ -1287,6 +1333,16 @@ function RecipeDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <CreateMaterialDialog
+        open={createMaterialOpen}
+        onOpenChange={setCreateMaterialOpen}
+        onCreated={(newProductId: string) => {
+          if (addingForLineIndex !== null) {
+            updateLine(addingForLineIndex, "productId", newProductId);
+          }
+          setAddingForLineIndex(null);
+        }}
+      />
     </Dialog>
   );
 }
@@ -1545,9 +1601,11 @@ function CategoryManager({
 function ProductDetailPanel({
   product,
   onDeleted,
+  initialOpenRecipe,
 }: {
   product: ProductWithCategories;
   onDeleted: () => void;
+  initialOpenRecipe?: boolean;
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -1569,6 +1627,15 @@ function ProductDetailPanel({
   });
 
   const recipe = recipes && recipes.length > 0 ? recipes[0] : null;
+
+  useEffect(() => {
+    if (initialOpenRecipe && recipes && !recipe) {
+      const timer = setTimeout(() => {
+        setRecipeDialogOpen(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [initialOpenRecipe, recipes, recipe]);
 
   // Fetch finished goods lots for this product
   const { data: inventoryData } = useQuery<InventoryGrouped[]>({
@@ -1829,7 +1896,7 @@ function ProductListItem({
 
 // ─── Products Tab ──────────────────────────────────────────
 
-function ProductsTab({ initialSelectedId }: { initialSelectedId?: string | null }) {
+function ProductsTab({ initialSelectedId, initialOpenRecipe }: { initialSelectedId?: string | null; initialOpenRecipe?: boolean }) {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -1966,6 +2033,7 @@ function ProductsTab({ initialSelectedId }: { initialSelectedId?: string | null 
               key={selectedProduct.id}
               product={selectedProduct}
               onDeleted={() => setSelectedId(null)}
+              initialOpenRecipe={initialOpenRecipe && selectedProduct.id === initialSelectedId}
             />
           </div>
         ) : (
@@ -1997,6 +2065,7 @@ export default function Inventory() {
   const searchParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
   const urlMaterial = searchParams.get("material");
   const urlProduct = searchParams.get("product");
+  const urlOpenRecipe = searchParams.get("openRecipe") === "true";
 
   const [activeTab, setActiveTab] = useState<"materials" | "products">(
     urlProduct ? "products" : "materials"
@@ -2054,7 +2123,7 @@ export default function Inventory() {
       </div>
 
       {/* Tab content */}
-      {activeTab === "materials" ? <MaterialsTab initialSelectedId={urlMaterial} /> : <ProductsTab initialSelectedId={urlProduct} />}
+      {activeTab === "materials" ? <MaterialsTab initialSelectedId={urlMaterial} /> : <ProductsTab initialSelectedId={urlProduct} initialOpenRecipe={urlOpenRecipe} />}
     </div>
   );
 }

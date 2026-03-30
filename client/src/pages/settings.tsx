@@ -61,6 +61,7 @@ interface AppSettings {
   batchNumberPrefix: string;
   autoGenerateLotNumbers: string;
   lotNumberPrefix: string;
+  fgLotNumberPrefix: string;
   skuPrefixRawMaterial: string;
   skuPrefixFinishedGood: string;
   updatedAt: string;
@@ -88,6 +89,7 @@ function SettingsContent() {
         batchNumberPrefix: settings.batchNumberPrefix,
         autoGenerateLotNumbers: settings.autoGenerateLotNumbers,
         lotNumberPrefix: settings.lotNumberPrefix,
+        fgLotNumberPrefix: settings.fgLotNumberPrefix,
         skuPrefixRawMaterial: settings.skuPrefixRawMaterial,
         skuPrefixFinishedGood: settings.skuPrefixFinishedGood,
       });
@@ -178,70 +180,6 @@ function SettingsContent() {
                 data-testid="input-company-name"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dateFormat" className="text-xs font-medium">Date Format</Label>
-              <Select value={form.dateFormat ?? "MM/DD/YYYY"} onValueChange={v => updateField("dateFormat", v)}>
-                <SelectTrigger className="h-9" data-testid="select-date-format">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                  <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                  <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="defaultUom" className="text-xs font-medium">Default Unit of Measure</Label>
-              <Select value={form.defaultUom ?? "g"} onValueChange={v => updateField("defaultUom", v)}>
-                <SelectTrigger className="h-9" data-testid="select-default-uom">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="g">Grams (g)</SelectItem>
-                  <SelectItem value="mg">Milligrams (mg)</SelectItem>
-                  <SelectItem value="L">Liters (L)</SelectItem>
-                  <SelectItem value="mL">Milliliters (mL)</SelectItem>
-                  <SelectItem value="gal">Gallons (gal)</SelectItem>
-                  <SelectItem value="lb">Pounds (lb)</SelectItem>
-                  <SelectItem value="oz">Ounces (oz)</SelectItem>
-                  <SelectItem value="pcs">Pieces (pcs)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Alerts & Thresholds */}
-        <Card data-testid="card-settings-alerts">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500" />
-              Alerts &amp; Thresholds
-            </CardTitle>
-            <CardDescription className="text-xs">Configure when stock alerts trigger</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="lowStockThreshold" className="text-xs font-medium">Low Stock Threshold (universal)</Label>
-              <p className="text-[11px] text-muted-foreground">
-                Items with stock below this number will appear as low stock alerts on the dashboard. Applies to all materials and products regardless of unit.
-              </p>
-              <Input
-                id="lowStockThreshold"
-                type="number"
-                min="0"
-                step="0.1"
-                value={form.lowStockThreshold ?? "1"}
-                onChange={e => updateField("lowStockThreshold", e.target.value)}
-                className="h-9 w-32"
-                data-testid="input-low-stock-threshold"
-              />
-            </div>
-            <Separator />
-            <p className="text-[11px] text-muted-foreground italic">
-              Per-material and per-category thresholds coming soon. This will enable dynamic reorder points for purchasing planning.
-            </p>
           </CardContent>
         </Card>
 
@@ -306,6 +244,26 @@ function SettingsContent() {
                 <p className="text-[10px] text-muted-foreground">Preview: {form.lotNumberPrefix ?? "LOT"}-001</p>
               </div>
             )}
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Finished Goods Lot Prefix</p>
+                <p className="text-[11px] text-muted-foreground">Prefix for production output lot numbers (e.g. FG-001)</p>
+              </div>
+            </div>
+            <div className="space-y-1.5 pl-1">
+              <Label htmlFor="fgLotNumberPrefix" className="text-xs font-medium">FG Lot Number Prefix</Label>
+              <Input
+                id="fgLotNumberPrefix"
+                value={form.fgLotNumberPrefix ?? "FG"}
+                onChange={e => updateField("fgLotNumberPrefix", e.target.value.toUpperCase())}
+                className="h-9 w-40 font-mono"
+                data-testid="input-fg-lot-prefix"
+              />
+              <p className="text-[10px] text-muted-foreground">Preview: {form.fgLotNumberPrefix ?? "FG"}-001</p>
+            </div>
           </CardContent>
         </Card>
 

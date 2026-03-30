@@ -34,7 +34,6 @@ import {
   Send,
   Save,
   FileText,
-  ExternalLink,
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
 import type { ReceivingRecordWithDetails, CoaDocumentWithDetails } from "@shared/schema";
@@ -226,12 +225,46 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
 
 // ── COA Status section ──
 
-function CoaStatusSection({ lotId }: { lotId: string }) {
+function CoaStatusSection({ lotId, receivingRecordId }: { lotId: string; receivingRecordId: string }) {
+  const { toast } = useToast();
   const { data: coaDocs, isLoading } = useQuery<CoaDocumentWithDetails[]>({
     queryKey: ["/api/coa/by-lot", lotId],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/coa/by-lot/${lotId}`);
       return res.json();
+    },
+  });
+
+  // Inline COA form state
+  const [showCoaForm, setShowCoaForm] = useState(false);
+  const [coaDocNumber, setCoaDocNumber] = useState("");
+  const [coaSourceType, setCoaSourceType] = useState("SUPPLIER");
+  const [coaOverallResult, setCoaOverallResult] = useState("");
+  const [coaNotes, setCoaNotes] = useState("");
+
+  const createCoa = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/coa", {
+        lotId,
+        receivingRecordId,
+        documentNumber: coaDocNumber || undefined,
+        sourceType: coaSourceType,
+        overallResult: coaOverallResult || undefined,
+        qcNotes: coaNotes || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "COA record created" });
+      setShowCoaForm(false);
+      setCoaDocNumber("");
+      setCoaSourceType("SUPPLIER");
+      setCoaOverallResult("");
+      setCoaNotes("");
+      queryClient.invalidateQueries({ queryKey: ["/api/coa/by-lot", lotId] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
 
@@ -252,6 +285,84 @@ function CoaStatusSection({ lotId }: { lotId: string }) {
   const acceptedDoc = docs.find((d) => d.qcAccepted === "true");
   const pendingDoc = docs.find((d) => d.qcAccepted !== "true" && d.qcAccepted !== "false");
 
+  const coaForm = (
+    <div className="space-y-2.5 pt-2" data-testid="coa-inline-form">
+      <div className="space-y-1">
+        <Label className="text-xs">Document Number</Label>
+        <Input
+          placeholder="e.g. COA-2026-001"
+          value={coaDocNumber}
+          onChange={(e) => setCoaDocNumber(e.target.value)}
+          className="text-sm h-8"
+          data-testid="input-coa-doc-number"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Source Type</Label>
+          <Select value={coaSourceType} onValueChange={setCoaSourceType}>
+            <SelectTrigger className="text-sm h-8" data-testid="select-coa-source-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="SUPPLIER">Supplier</SelectItem>
+              <SelectItem value="INTERNAL_LAB">Internal Lab</SelectItem>
+              <SelectItem value="THIRD_PARTY_LAB">Third-Party Lab</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Overall Result</Label>
+          <Select value={coaOverallResult} onValueChange={setCoaOverallResult}>
+            <SelectTrigger className="text-sm h-8" data-testid="select-coa-result">
+              <SelectValue placeholder="Select…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PASS">Pass</SelectItem>
+              <SelectItem value="FAIL">Fail</SelectItem>
+              <SelectItem value="CONDITIONAL">Conditional</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Notes (optional)</Label>
+        <Textarea
+          placeholder="Any notes about this COA…"
+          value={coaNotes}
+          onChange={(e) => setCoaNotes(e.target.value)}
+          className="text-sm min-h-[50px]"
+          data-testid="textarea-coa-notes"
+        />
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => createCoa.mutate()}
+          disabled={createCoa.isPending || !coaOverallResult}
+          data-testid="button-submit-coa"
+        >
+          {createCoa.isPending ? (
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          ) : (
+            <FileCheck className="h-3 w-3 mr-1" />
+          )}
+          Attach COA
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => setShowCoaForm(false)}
+          data-testid="button-cancel-coa"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
@@ -266,12 +377,20 @@ function CoaStatusSection({ lotId }: { lotId: string }) {
               <XCircle className="h-3 w-3 mr-1" />
               No COA on file
             </Badge>
-            <Link href="/coa">
-              <Button variant="link" size="sm" className="text-xs h-auto p-0" data-testid="link-upload-coa">
-                Upload COA <ExternalLink className="h-3 w-3 ml-1" />
+            {!showCoaForm && (
+              <Button
+                variant="link"
+                size="sm"
+                className="text-xs h-auto p-0"
+                onClick={() => setShowCoaForm(true)}
+                data-testid="button-add-coa"
+              >
+                <FileCheck className="h-3 w-3 mr-1" />
+                Attach COA
               </Button>
-            </Link>
+            )}
           </div>
+          {showCoaForm && coaForm}
         </div>
       ) : acceptedDoc ? (
         <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3 space-y-2" data-testid="coa-status-accepted">
@@ -504,7 +623,7 @@ function ReceivingDetail({
       <Separator />
 
       {/* COA Status */}
-      <CoaStatusSection lotId={record.lotId} />
+      <CoaStatusSection lotId={record.lotId} receivingRecordId={record.id} />
 
       <Separator />
 
@@ -806,6 +925,16 @@ export default function Receiving() {
                   COA Library
                 </button>
               </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => { window.location.hash = "#/suppliers"; }}
+                data-testid="button-goto-receive"
+              >
+                <Package className="h-3.5 w-3.5 mr-1.5" />
+                Receive PO Items
+              </Button>
             </div>
             <span className="text-xs text-muted-foreground" data-testid="text-total-count">
               {filteredRecords.length} record{filteredRecords.length !== 1 ? "s" : ""}
@@ -878,7 +1007,7 @@ export default function Receiving() {
       <div className="flex-1 overflow-hidden bg-background">
         {selectedRecord ? (
           <ReceivingDetail
-            key={selectedRecord.id}
+            key={selectedRecord.id + ":" + selectedRecord.status}
             record={selectedRecord}
             onUpdated={handleUpdated}
           />

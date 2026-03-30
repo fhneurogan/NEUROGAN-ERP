@@ -323,6 +323,7 @@ export class MemStorage implements IStorage {
       batchNumberPrefix: "BATCH",
       autoGenerateLotNumbers: "true",
       lotNumberPrefix: "LOT",
+      fgLotNumberPrefix: "FG",
       skuPrefixRawMaterial: "RA",
       skuPrefixFinishedGood: "US",
       updatedAt: new Date(),
@@ -1660,28 +1661,31 @@ export class MemStorage implements IStorage {
   }
 
   async getNextOutputLotNumber(): Promise<string> {
+    const settings = await this.getSettings();
+    const prefix = settings.fgLotNumberPrefix ?? "FG";
+    const pattern = new RegExp(`^${prefix}-(\\d+)$`);
     let max = 0;
-    // Check completed batches for existing FG-NNN output lot numbers
+    // Check completed batches for existing PREFIX-NNN output lot numbers
     const batches = Array.from(this.productionBatches.values());
     for (const batch of batches) {
       if (batch.outputLotNumber) {
-        const match = batch.outputLotNumber.match(/^FG-(\d+)$/);
+        const match = batch.outputLotNumber.match(pattern);
         if (match) {
           const num = parseInt(match[1], 10);
           if (num > max) max = num;
         }
       }
     }
-    // Also check lots table for any FG-NNN lot numbers
+    // Also check lots table for any PREFIX-NNN lot numbers
     const lots = Array.from(this.lots.values());
     for (const lot of lots) {
-      const match = lot.lotNumber.match(/^FG-(\d+)$/);
+      const match = lot.lotNumber.match(pattern);
       if (match) {
         const num = parseInt(match[1], 10);
         if (num > max) max = num;
       }
     }
-    return `FG-${String(max + 1).padStart(3, '0')}`;
+    return `${prefix}-${String(max + 1).padStart(3, '0')}`;
   }
 
   async completeProductionBatch(
