@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatDateTime } from "@/lib/formatDate";
+import { DateInput } from "@/components/ui/date-input";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -441,7 +443,7 @@ function CoaDetail({
             {coa.qcReviewedAt && (
               <div className="text-sm">
                 <span className="text-muted-foreground">Reviewed At:</span>{" "}
-                <span data-testid="text-coa-qc-date">{new Date(coa.qcReviewedAt).toLocaleString()}</span>
+                <span data-testid="text-coa-qc-date">{formatDateTime(coa.qcReviewedAt)}</span>
               </div>
             )}
             {coa.qcNotes && (
@@ -726,10 +728,9 @@ function UploadCoaDialog({
             {/* Analysis Date */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Analysis Date</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={analysisDate}
-                onChange={(e) => setAnalysisDate(e.target.value)}
+                onChange={setAnalysisDate}
                 className="text-sm"
                 data-testid="input-coa-analysis-date"
               />

@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +35,7 @@ import {
   FileText,
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
+import { formatDate, formatDateTime } from "@/lib/formatDate";
 import type { ReceivingRecordWithDetails, CoaDocumentWithDetails } from "@shared/schema";
 
 // ── Status badge ──
@@ -158,7 +158,7 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
     {
       label: "Visual Inspection",
       description: record.visualExamBy
-        ? `Inspected by ${record.visualExamBy}${record.visualExamAt ? ` on ${new Date(record.visualExamAt).toLocaleDateString()}` : ""}`
+        ? `Inspected by ${record.visualExamBy}${record.visualExamAt ? ` on ${formatDate(record.visualExamAt)}` : ""}`
         : "Pending inspection",
       completed: !!record.visualExamBy,
       icon: ClipboardCheck,
@@ -166,7 +166,7 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
     {
       label: "QC Review",
       description: record.qcReviewedBy
-        ? `${dispositionLabel(record.qcDisposition ?? "")} by ${record.qcReviewedBy}${record.qcReviewedAt ? ` on ${new Date(record.qcReviewedAt).toLocaleDateString()}` : ""}`
+        ? `${dispositionLabel(record.qcDisposition ?? "")} by ${record.qcReviewedBy}${record.qcReviewedAt ? ` on ${formatDate(record.qcReviewedAt)}` : ""}`
         : record.status === "PENDING_QC"
         ? "Awaiting QC review"
         : "Not yet submitted",
@@ -776,7 +776,7 @@ function ReceivingDetail({
                 {record.qcReviewedAt && (
                   <div className="text-sm">
                     <span className="text-muted-foreground">Reviewed At:</span>{" "}
-                    <span data-testid="text-qc-date">{new Date(record.qcReviewedAt).toLocaleString()}</span>
+                    <span data-testid="text-qc-date">{formatDateTime(record.qcReviewedAt)}</span>
                   </div>
                 )}
                 {record.qcNotes && (
@@ -868,7 +868,20 @@ export default function Receiving() {
 
   const { data: records = [], isLoading } = useQuery<ReceivingRecordWithDetails[]>({
     queryKey: ["/api/receiving"],
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
+
+  // Fetch open POs (SUBMITTED or PARTIALLY_RECEIVED)
+  const { data: allPOs } = useQuery<any[]>({
+    queryKey: ["/api/purchase-orders"],
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+  const submittedPOs = useMemo(() =>
+    (allPOs ?? []).filter((po: any) => po.status === "SUBMITTED" || po.status === "PARTIALLY_RECEIVED"),
+    [allPOs]
+  );
 
   const filteredRecords = useMemo(() => {
     let result = records;
@@ -907,6 +920,9 @@ export default function Receiving() {
     return counts;
   }, [records]);
 
+  const totalItems = submittedPOs.length + filteredRecords.length;
+  const hasAnyContent = submittedPOs.length > 0 || filteredRecords.length > 0;
+
   return (
     <div className="flex h-full" data-testid="page-receiving">
       {/* Left panel — list */}
@@ -914,30 +930,9 @@ export default function Receiving() {
         {/* Header & filters */}
         <div className="px-4 pt-4 pb-3 space-y-3 border-b border-border/50">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h1 className="text-base font-semibold text-foreground">Receiving & Quarantine</h1>
-              <Link href="/coa">
-                <button
-                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  data-testid="link-coa-library"
-                >
-                  <FileCheck className="h-3.5 w-3.5" />
-                  COA Library
-                </button>
-              </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => { window.location.hash = "#/suppliers"; }}
-                data-testid="button-goto-receive"
-              >
-                <Package className="h-3.5 w-3.5 mr-1.5" />
-                Receive PO Items
-              </Button>
-            </div>
+            <h1 className="text-base font-semibold text-foreground">Receiving & Quarantine</h1>
             <span className="text-xs text-muted-foreground" data-testid="text-total-count">
-              {filteredRecords.length} record{filteredRecords.length !== 1 ? "s" : ""}
+              {totalItems} item{totalItems !== 1 ? "s" : ""}
             </span>
           </div>
 
@@ -981,24 +976,58 @@ export default function Receiving() {
                 </div>
               ))}
             </div>
-          ) : filteredRecords.length === 0 ? (
+          ) : !hasAnyContent ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
               <Package className="h-10 w-10 text-muted-foreground/40 mb-3" />
               <p className="text-sm text-muted-foreground" data-testid="text-empty-state">
-                {records.length === 0
-                  ? "No receiving records. Materials will appear here when purchase orders are received."
-                  : "No records match the current filter."}
+                No purchase orders or receiving records. Create a PO in the Suppliers tab to get started.
               </p>
             </div>
           ) : (
-            filteredRecords.map((r) => (
-              <ReceivingListItem
-                key={r.id}
-                record={r}
-                isSelected={selectedId === r.id}
-                onClick={() => setSelectedId(r.id)}
-              />
-            ))
+            <>
+              {/* Open POs awaiting receipt */}
+              {submittedPOs.length > 0 && (
+                <>
+                  <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b">
+                    Awaiting Receipt ({submittedPOs.length})
+                  </div>
+                  {submittedPOs.map((po: any) => (
+                    <button
+                      key={po.id}
+                      className="w-full text-left px-3 py-2.5 border-b border-border/50 hover:bg-muted/50 transition-colors"
+                      onClick={() => { window.location.hash = `#/suppliers?po=${po.id}`; }}
+                      data-testid={`item-open-po-${po.id}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium font-mono">{po.poNumber}</span>
+                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-0 text-[10px]">
+                            {po.status === "PARTIALLY_RECEIVED" ? "Partial" : "Submitted"}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{formatDate(po.orderDate)}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{po.supplierName ?? "—"}</p>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* Received records */}
+              {filteredRecords.length > 0 && (
+                <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b">
+                  Received ({filteredRecords.length})
+                </div>
+              )}
+              {filteredRecords.map((r) => (
+                <ReceivingListItem
+                  key={r.id}
+                  record={r}
+                  isSelected={selectedId === r.id}
+                  onClick={() => setSelectedId(r.id)}
+                />
+              ))}
+            </>
           )}
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { formatDate } from "@/lib/formatDate";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -285,7 +286,7 @@ export default function Suppliers() {
                         {sup.notes ?? "—"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {sup.createdAt ? new Date(sup.createdAt).toLocaleDateString() : "—"}
+                        {formatDate(sup.createdAt)}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">

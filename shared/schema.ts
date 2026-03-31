@@ -126,6 +126,7 @@ export const poLineItems = pgTable("po_line_items", {
   quantityReceived: decimal("quantity_received").notNull().default("0"),
   unitPrice: decimal("unit_price"),
   uom: text("uom").notNull(),
+  lotNumber: text("lot_number"),
   notes: text("notes"),
 });
 

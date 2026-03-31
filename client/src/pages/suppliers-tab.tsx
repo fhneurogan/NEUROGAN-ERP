@@ -57,6 +57,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatDate } from "@/lib/formatDate";
+import { DateInput } from "@/components/ui/date-input";
 import { useToast } from "@/hooks/use-toast";
 import type { Supplier, SupplierDocument, SupplierQualificationWithDetails } from "@shared/schema";
 import PurchaseOrders from "./purchase-orders";
@@ -421,7 +423,7 @@ function DocumentList({ supplierId }: { supplierId: string }) {
                     {doc.fileSize ? formatFileSize(Number(doc.fileSize)) : "—"}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : "—"}
+                    {formatDate(doc.uploadedAt)}
                   </span>
                 </div>
               </div>
@@ -572,10 +574,9 @@ function QualificationDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-sm">Qualification Date</Label>
-            <Input
-              type="date"
+            <DateInput
               value={qualificationDate}
-              onChange={(e) => handleDateChange(e.target.value)}
+              onChange={handleDateChange}
               className="text-sm"
               data-testid="input-qual-date"
             />
@@ -625,10 +626,9 @@ function QualificationDialog({
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm">Next Requalification Due</Label>
-            <Input
-              type="date"
+            <DateInput
               value={nextDue}
-              onChange={(e) => setNextDue(e.target.value)}
+              onChange={setNextDue}
               className="text-sm"
               data-testid="input-qual-next-due"
             />
@@ -890,7 +890,7 @@ function SupplierDetail({
           <div>
             <p className="text-xs font-medium text-muted-foreground">Created</p>
             <p className="text-sm text-muted-foreground">
-              {supplier.createdAt ? new Date(supplier.createdAt).toLocaleDateString() : "—"}
+              {formatDate(supplier.createdAt)}
             </p>
           </div>
         </div>

@@ -44,6 +44,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus } from "lucide-react";
 import type { Product, Lot, Location } from "@shared/schema";
 import { formatQty } from "@/lib/formatQty";
+import { DateInput } from "@/components/ui/date-input";
+import { formatDate } from "@/lib/formatDate";
 
 interface TransactionWithDetails {
   id: string;
@@ -469,20 +471,18 @@ export default function Transactions() {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">From</label>
-              <Input
-                type="date"
+              <DateInput
                 value={filterDateFrom}
-                onChange={(e) => setFilterDateFrom(e.target.value)}
+                onChange={setFilterDateFrom}
                 className="w-36 h-8 text-xs"
                 data-testid="filter-date-from"
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">To</label>
-              <Input
-                type="date"
+              <DateInput
                 value={filterDateTo}
-                onChange={(e) => setFilterDateTo(e.target.value)}
+                onChange={setFilterDateTo}
                 className="w-36 h-8 text-xs"
                 data-testid="filter-date-to"
               />
@@ -545,7 +545,7 @@ export default function Transactions() {
                     return (
                       <TableRow key={tx.id} data-testid={`row-transaction-${tx.id}`}>
                         <TableCell className="text-xs whitespace-nowrap">
-                          {new Date(tx.createdAt).toLocaleDateString()}
+                          {formatDate(tx.createdAt)}
                         </TableCell>
                         <TableCell>{typeBadge(tx.type)}</TableCell>
                         <TableCell className="text-xs">{tx.productName}</TableCell>
