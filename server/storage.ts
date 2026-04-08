@@ -40,6 +40,7 @@ export interface TransactionFilters {
 }
 
 export interface TransactionWithDetails extends Transaction {
+  productId: string;
   productName: string;
   lotNumber: string;
   locationName: string;
@@ -1075,6 +1076,7 @@ export class MemStorage implements IStorage {
       const batch = t.productionBatchId ? this.productionBatches.get(t.productionBatchId) : undefined;
       return {
         ...t,
+        productId: lot?.productId ?? "",
         productName: product?.name ?? "Unknown",
         lotNumber: lot?.lotNumber ?? "Unknown",
         locationName: location?.name ?? "Unknown",
@@ -1761,17 +1763,19 @@ export class MemStorage implements IStorage {
       notes: `Produced in batch ${batch.batchNumber}`,
     });
 
-    // 4. Create PRODUCTION_OUTPUT transaction
-    await this.createTransaction({
-      lotId: outputLot.id,
-      locationId,
-      type: "PRODUCTION_OUTPUT",
-      quantity: String(Math.abs(actualQuantity)),
-      uom: batch.outputUom,
-      productionBatchId: id,
-      notes: `Production output from batch ${batch.batchNumber}`,
-      performedBy: batch.operatorName ?? "system",
-    });
+    // 4. Create PRODUCTION_OUTPUT transaction only if actualQuantity > 0
+    if (actualQuantity > 0) {
+      await this.createTransaction({
+        lotId: outputLot.id,
+        locationId,
+        type: "PRODUCTION_OUTPUT",
+        quantity: String(Math.abs(actualQuantity)),
+        uom: batch.outputUom,
+        productionBatchId: id,
+        notes: `Production output from batch ${batch.batchNumber}`,
+        performedBy: batch.operatorName ?? "system",
+      });
+    }
 
     return this.enrichBatch(updated);
   }

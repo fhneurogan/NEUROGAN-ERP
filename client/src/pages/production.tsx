@@ -48,8 +48,19 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -890,6 +901,8 @@ function CompleteBatchDialog({
   const [disposition, setDisposition] = useState("");
   const [reviewedBy, setReviewedBy] = useState("");
   const [qcNotes, setQcNotes] = useState("");
+  const [pendingDisposition, setPendingDisposition] = useState<string | null>(null);
+  const [showDispositionConfirm, setShowDispositionConfirm] = useState(false);
 
   // Fetch next auto-generated lot number when dialog opens
   const { data: nextLotData } = useQuery<{ lotNumber: string }>({
@@ -927,6 +940,14 @@ function CompleteBatchDialog({
     (yieldPct >= 95 && yieldPct <= 105) ? "text-emerald-600 dark:text-emerald-400" :
     (yieldPct >= 85 && yieldPct <= 115) ? "text-amber-600 dark:text-amber-400" :
     "text-red-600 dark:text-red-400";
+
+  const isRejectedOrReprocess = disposition === "REJECTED" || disposition === "REPROCESS";
+
+  useEffect(() => {
+    if (isRejectedOrReprocess) {
+      setActualQuantity("0");
+    }
+  }, [disposition]);
 
   const completeMutation = useMutation({
     mutationFn: async () => {
@@ -995,9 +1016,22 @@ function CompleteBatchDialog({
                   type="number"
                   step="any"
                   value={actualQuantity}
-                  onChange={e => setActualQuantity(e.target.value)}
+                  onChange={e => {
+                    if (!isRejectedOrReprocess) {
+                      setActualQuantity(e.target.value);
+                    }
+                  }}
+                  readOnly={isRejectedOrReprocess}
+                  className={cn(isRejectedOrReprocess && "opacity-50 cursor-not-allowed")}
                   data-testid="input-actual-qty"
                 />
+                {isRejectedOrReprocess && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {disposition === "REJECTED"
+                      ? "Rejected batches produce no output \u2014 quantity set to 0."
+                      : "Reprocess batches produce no output until the batch is re-run."}
+                  </p>
+                )}
               </div>
               <div>
                 <Label>Yield %</Label>
@@ -1052,7 +1086,17 @@ function CompleteBatchDialog({
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">QC Review</h3>
             <div>
               <Label htmlFor="disposition">Disposition</Label>
-              <Select onValueChange={setDisposition} value={disposition}>
+              <Select
+                onValueChange={(val) => {
+                  if (val === "REJECTED" || val === "REPROCESS") {
+                    setPendingDisposition(val);
+                    setShowDispositionConfirm(true);
+                  } else {
+                    setDisposition(val);
+                  }
+                }}
+                value={disposition}
+              >
                 <SelectTrigger data-testid="select-disposition">
                   <SelectValue placeholder="Select disposition..." />
                 </SelectTrigger>
@@ -1098,6 +1142,36 @@ function CompleteBatchDialog({
           </Button>
         </SheetFooter>
       </SheetContent>
+
+      <AlertDialog open={showDispositionConfirm} onOpenChange={setShowDispositionConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDisposition === "REJECTED" ? "Reject this batch?" : "Mark for reprocessing?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDisposition === "REJECTED"
+                ? "Rejecting this batch will record zero output and flag the batch as failed. This action is final."
+                : "Marking for reprocessing will record zero output. The batch will need to be re-run. Are you sure?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setPendingDisposition(null); }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={pendingDisposition === "REJECTED" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}
+              onClick={() => {
+                setDisposition(pendingDisposition!);
+                setPendingDisposition(null);
+                setShowDispositionConfirm(false);
+              }}
+            >
+              {pendingDisposition === "REJECTED" ? "Yes, Reject" : "Yes, Reprocess"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }
@@ -1214,7 +1288,7 @@ function BatchDetail({
           <p className="text-sm text-muted-foreground mt-1" data-testid="text-detail-product">
             <span
               className="cursor-pointer hover:underline text-primary"
-              onClick={() => { window.location.hash = `#/supply-chain?product=${batch.productId}`; }}
+              onClick={() => { window.location.hash = `#/inventory?product=${batch.productId}`; }}
             >
               {batch.productName}
             </span>{" "}

@@ -170,6 +170,7 @@ export class DatabaseStorage implements IStorage {
       const location = await this.getLocation(t.locationId);
       result.push({
         ...t,
+        productId: lot?.productId ?? "",
         productName: product?.name ?? "Unknown",
         lotNumber: lot?.lotNumber ?? "Unknown",
         locationName: location?.name ?? "Unknown",
@@ -719,17 +720,19 @@ export class DatabaseStorage implements IStorage {
       notes: `Produced in batch ${batch.batchNumber}`,
     });
 
-    // 4. Create PRODUCTION_OUTPUT transaction
-    await this.createTransaction({
-      lotId: outputLot.id,
-      locationId,
-      type: "PRODUCTION_OUTPUT",
-      quantity: String(Math.abs(actualQuantity)),
-      uom: batch.outputUom,
-      productionBatchId: id,
-      notes: `Production output from batch ${batch.batchNumber}`,
-      performedBy: batch.operatorName ?? "system",
-    });
+    // 4. Create PRODUCTION_OUTPUT transaction only if actualQuantity > 0
+    if (actualQuantity > 0) {
+      await this.createTransaction({
+        lotId: outputLot.id,
+        locationId,
+        type: "PRODUCTION_OUTPUT",
+        quantity: String(Math.abs(actualQuantity)),
+        uom: batch.outputUom,
+        productionBatchId: id,
+        notes: `Production output from batch ${batch.batchNumber}`,
+        performedBy: batch.operatorName ?? "system",
+      });
+    }
 
     return this.enrichBatch(updated);
   }

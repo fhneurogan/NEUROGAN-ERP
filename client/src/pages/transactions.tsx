@@ -59,6 +59,7 @@ interface TransactionWithDetails {
   notes: string | null;
   performedBy: string | null;
   createdAt: string;
+  productId: string;
   productName: string;
   lotNumber: string;
   locationName: string;
@@ -548,7 +549,18 @@ export default function Transactions() {
                           {formatDate(tx.createdAt)}
                         </TableCell>
                         <TableCell>{typeBadge(tx.type)}</TableCell>
-                        <TableCell className="text-xs">{tx.productName}</TableCell>
+                        <TableCell className="text-xs">
+                          <span
+                            className="cursor-pointer hover:underline text-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const param = tx.type === "PRODUCTION_OUTPUT" ? "product" : "material";
+                              window.location.hash = `#/inventory?${param}=${tx.productId}`;
+                            }}
+                          >
+                            {tx.productName}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-xs font-mono whitespace-nowrap">{tx.lotNumber}</TableCell>
                         <TableCell
                           className={`text-xs text-right font-mono ${
