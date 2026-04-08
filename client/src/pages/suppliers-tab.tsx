@@ -1088,9 +1088,12 @@ export default function SuppliersTab() {
   const searchParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
   const urlPoId = searchParams.get("po");
   const urlSupplierId = searchParams.get("supplier");
+  const urlOpenCreate = searchParams.get("openCreate") === "true";
+  const urlMaterial = searchParams.get("material");
+  const urlTab = searchParams.get("tab");
 
   const [activeTab, setActiveTab] = useState<SubTab>(
-    urlSupplierId ? "suppliers" : "purchase-orders"
+    urlSupplierId ? "suppliers" : urlTab === "purchase-orders" || urlTab === "suppliers" ? urlTab : "purchase-orders"
   );
 
   return (
@@ -1130,7 +1133,7 @@ export default function SuppliersTab() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === "purchase-orders" && <PurchaseOrders initialSelectedId={urlPoId} />}
+        {activeTab === "purchase-orders" && <PurchaseOrders initialSelectedId={urlPoId} initialOpenCreate={urlOpenCreate} initialMaterialId={urlMaterial} />}
         {activeTab === "suppliers" && <SuppliersContent initialSelectedId={urlSupplierId} />}
       </div>
     </div>

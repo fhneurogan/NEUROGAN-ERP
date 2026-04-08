@@ -62,6 +62,7 @@ import {
   Trash2,
   X,
   ShoppingBag,
+  ShoppingCart,
   FlaskConical,
   Check,
 } from "lucide-react";
@@ -499,6 +500,18 @@ function MaterialDetailPanel({
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-1"
+            onClick={() => {
+              window.location.hash = `#/suppliers?tab=purchase-orders&openCreate=true&material=${item.productId}`;
+            }}
+            data-testid="button-create-po"
+          >
+            <ShoppingCart className="h-4 w-4 mr-1" />
+            Create PO
+          </Button>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-sm font-mono text-muted-foreground">
               {item.sku}

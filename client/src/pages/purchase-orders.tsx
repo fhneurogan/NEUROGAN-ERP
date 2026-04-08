@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -428,11 +428,13 @@ function CreatePOSheet({
   onOpenChange,
   suppliers,
   products,
+  initialMaterialId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   suppliers: Supplier[];
   products: Product[];
+  initialMaterialId?: string | null;
 }) {
   const { toast } = useToast();
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -538,6 +540,17 @@ function CreatePOSheet({
     control: form.control,
     name: "lineItems",
   });
+
+  // Pre-fill first line item with material from URL param
+  useEffect(() => {
+    if (initialMaterialId && open) {
+      form.setValue("lineItems.0.productId", initialMaterialId);
+      const mat = products.find(p => p.id === initialMaterialId);
+      if (mat) {
+        form.setValue("lineItems.0.uom", mat.defaultUom);
+      }
+    }
+  }, [initialMaterialId, open]);
 
   const mutation = useMutation({
     mutationFn: async (values: CreatePOValues) => {
@@ -1393,10 +1406,10 @@ function ReceiveSheet({
 
 // ── Main Page ──
 
-export default function PurchaseOrders({ initialSelectedId }: { initialSelectedId?: string | null }) {
+export default function PurchaseOrders({ initialSelectedId, initialOpenCreate, initialMaterialId }: { initialSelectedId?: string | null; initialOpenCreate?: boolean; initialMaterialId?: string | null }) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [statusFilter, setStatusFilter] = useState("");
-  const [createSheetOpen, setCreateSheetOpen] = useState(false);
+  const [createSheetOpen, setCreateSheetOpen] = useState(initialOpenCreate ?? false);
   const [receiveSheetOpen, setReceiveSheetOpen] = useState(false);
   const { toast } = useToast();
 
@@ -1550,6 +1563,7 @@ export default function PurchaseOrders({ initialSelectedId }: { initialSelectedI
           onOpenChange={setCreateSheetOpen}
           suppliers={suppliers}
           products={products}
+          initialMaterialId={initialMaterialId}
         />
       )}
 
