@@ -71,9 +71,9 @@ If the ticket doesn't match reality (e.g., a file has moved, a column is gone), 
 
 ### 4.2 One ticket, one branch, one PR
 
-- Branch: `ticket/<id>-<slug>` (e.g., `ticket/F-03-audit-trail`).
+- Branch: `ticket/<id>-<slug>` (e.g., `ticket/F-03-audit-trail`), created from the current tip of `FDA-EQMS-feature-package`.
 - Commits are small and coherent. Prefer a few labelled commits over one dump.
-- PR opens against `main`. No stacked branches. If a ticket depends on another, wait for the parent to merge.
+- PR opens against `FDA-EQMS-feature-package` (the integration branch for this build), **not** `main`. No stacked branches. If a ticket depends on another, wait for the parent to merge. See §6 for the full branch model.
 
 ### 4.3 Regulated-code Definition of Done
 
@@ -176,10 +176,42 @@ Copy this checklist into every PR description. All boxes must be checked.
 
 ## 6. Branching, reviews, releases
 
-- Branch from `main`; PR to `main`.
-- Two reviewers for any change to regulated paths (`shared/schema.ts`, `server/db-storage.ts`, `server/auth/*`, `server/audit/*`, `server/state/*`). `CODEOWNERS` enforces this.
-- Squash-merge. Conventional-commit style subject. First line of the PR description becomes the commit body.
-- Release = tag `rel-v1.x.y` + deploy via Railway. IQ log includes image digest + migration SHA.
+### 6.1 Branch model (integration train for the FDA/EQMS build)
+
+During the FDA/EQMS feature build, work flows through a long-lived integration branch `FDA-EQMS-feature-package`:
+
+1. **Tickets.** Every ticket from `neurogan-erp-build-spec.md` gets its own branch `ticket/<id>-<slug>` (e.g. `ticket/F-03-audit-trail`), created from the current tip of `FDA-EQMS-feature-package`.
+2. **Ticket PRs target `FDA-EQMS-feature-package`,** not `main`.
+3. **Module PRs to `main`.** Once every ticket in a module (e.g. R-01) is merged into `FDA-EQMS-feature-package` **and** the module's VSR (`VSR-R-0x`) is signed by Carrie Treat, a PR from `FDA-EQMS-feature-package` to `main` carries that module across. Merges into `main` happen **one module at a time**, never as a single big-bang merge.
+4. **Weekly back-merge `main` → `FDA-EQMS-feature-package`** to keep the integration branch in sync with any hotfixes that land directly on `main`.
+5. **Release = tag `rel-v1.x.y` on `main`** immediately after each module merge. IQ log for the release includes image digest + migration SHA.
+
+### 6.2 Environments
+
+- `FDA-EQMS-feature-package` auto-deploys to **Railway staging**. Carrie exercises the signature ceremony here against seeded-but-staging data as part of OQ/PQ.
+- `main` auto-deploys to **Railway production**. This is the signed, validated record of truth.
+- Ticket branches do **not** auto-deploy. Preview deploys are not used during this build.
+
+### 6.3 Reviews — solo-developer control model
+
+Current staffing for this build is a single developer (Frederik). The classic "two reviewers for regulated paths" rule assumes a multi-person team and is not operable today. The regulated-software controls that replace peer review are:
+
+- **CI gatekeeping.** Every PR to `FDA-EQMS-feature-package` or `main` must have a green CI run: `pnpm lint --max-warnings 0`, `pnpm typecheck` (tsc --noEmit), `pnpm test` (unit), `pnpm test:integration` (including the 6-case suite — happy / 401 / 403 / 409 / 422 / audit-row assertion — for every regulated endpoint). Branch protection blocks merges with red CI.
+- **Signature ceremony as separation-of-duties.** Regulated record state changes (APPROVE, RELEASE, SUBMIT) do not become law when a developer merges a PR. They become law when a QA-role user (Carrie Treat) completes the ceremony defined in F-04: password re-entry, meaning code, manifestation-of-identity row. The developer cannot sign a record they produced — the ceremony requires the QA role, which the developer account does not hold. This is the 21 CFR Part 11 separation-of-duties control. Peer PR approval is not.
+- **CODEOWNERS** remains in place for `shared/schema.ts`, `server/db-storage.ts`, `server/auth/*`, `server/audit/*`, `server/state/*`. It surfaces review-worthy PRs but does not block self-merge in a solo-dev setup (`require_code_owner_reviews: false` on branch protection).
+
+When a second developer joins, branch protection on `main` and `FDA-EQMS-feature-package` tightens: `required_approving_review_count` becomes `1` (or `2` for regulated paths), `require_code_owner_reviews` flips to `true`. Until then, CI + the signature ceremony are the gates.
+
+### 6.4 Merge hygiene
+
+- **Squash-merge** on ticket → `FDA-EQMS-feature-package`. First line of the PR description becomes the squash commit body so that the squashed commit captures the full rationale.
+- **Merge commit (no squash)** on `FDA-EQMS-feature-package` → `main` at module completion. The module merge is a material event; preserving the full sequence of ticket commits in `main`'s history makes the traceability matrix self-evidencing for the FDA.
+- **Conventional-commit style subject** on all PR titles. Example: `feat(audit): durable audit_trail table with before/after JSON (F-03)`.
+- **No rebasing or force-pushing** a branch after a reviewer (human or automation) has started reading it. Branch protection blocks force-push to `main` and `FDA-EQMS-feature-package` regardless.
+
+### 6.5 Frozen legacy branches
+
+`dev`, `eQMS-Layer`, and `claude/create-eqms-layer-QbOLi` contain the Perplexity-built prototype that preceded this build. They are explicitly not Part 11 compliant (see the "Part 11 TODO" banners left in the code by the prior developer) and are retained **only** as historical reference for the validation audit trail. They have branch protection (PR required, no direct pushes, no force-push, no deletion) and must not receive new work.
 
 ---
 
