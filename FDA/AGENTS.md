@@ -280,4 +280,40 @@ Paste into every PR:
 
 ---
 
+## 10. The presentation-only PR lane
+
+The full regulated-code DoD in §4.3 is correct for any ticket that touches schema, storage, a regulated endpoint, or a state machine. A copy tweak, a button restyle, or a layout adjustment does not need "state-machine unit tests for all legal and illegal edges."
+
+**Presentation-only PRs** are PRs whose diff touches **none** of:
+- route handlers (`server/routes.ts`, future `server/routes/**`)
+- schema (`shared/schema.ts` or generated migration files)
+- storage layer (`server/db-storage.ts`, future `server/storage/**`)
+- state machines (`server/state/**`)
+- middleware (`server/auth/**`, `server/audit/**`, anything mounted in `server/index.ts`)
+- migrations (`drizzle/**`, migration runner)
+
+### 10.1 What a presentation-only PR may skip
+
+- state-machine unit tests
+- integration-test 401 / 403 / 409 / 422 / audit-row suite
+- migration review
+- validation-scaffold entries (no URS / FRS / DS / OQ update required)
+
+### 10.2 What a presentation-only PR must still include
+
+- ESLint clean, `--max-warnings 0`
+- `tsc --noEmit` clean
+- no `any` introduced
+- all existing tests still passing on CI
+- screenshots for any visible UI change
+- a PR description that states **explicitly** "no regulated paths touched" and lists every file changed
+
+### 10.3 The CODEOWNERS kill-switch
+
+**If any file in the diff is covered by `CODEOWNERS`, the PR is not presentation-only.** Full regulated-code DoD applies, regardless of how the author framed the PR. `CODEOWNERS` is the authoritative list of regulated paths — human judgement does not override it.
+
+When in doubt, default back to the full DoD. The cost of over-documenting is trivial; the cost of sneaking a regulated change through the presentation lane is a Part 11 finding.
+
+---
+
 **End of AGENTS.md.**
