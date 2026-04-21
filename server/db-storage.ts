@@ -790,7 +790,6 @@ export class DatabaseStorage implements IStorage {
       .groupBy(schema.transactions.lotId, schema.transactions.locationId, schema.transactions.uom);
 
     const lotMap = new Map(productLots.map(l => [l.id, l]));
-    const product = await this.getProduct(productId);
     const result: StockByLotLocation[] = [];
 
     for (const row of rows) {
