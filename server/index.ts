@@ -56,7 +56,7 @@ app.use(passport.session());
 
 // Temporary session-trace debug logging — remove after diagnosing 401
 app.use("/api/auth", (req, _res, next) => {
-  const passportUser = (req.session as Record<string, unknown> & { passport?: { user?: unknown } })?.passport?.user;
+  const passportUser = (req.session as unknown as { passport?: { user?: unknown } })?.passport?.user;
   console.log(
     `[session-trace] ${req.method} ${req.path}` +
     ` | sid=${req.sessionID ?? "NONE"}` +
