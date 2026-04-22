@@ -1,8 +1,13 @@
 import express from "express";
+import session from "express-session";
+import ConnectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { errorMiddleware } from "./error-middleware";
+import { passport } from "./auth/passport";
+import { requireAuth } from "./auth/middleware";
+import { authRouter } from "./auth/auth-routes";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +27,41 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+const PgSession = ConnectPgSimple(session);
+
+app.use(
+  session({
+    store: new PgSession({
+      conString: process.env.DATABASE_URL,
+      tableName: "session",
+      // Prune expired sessions once per day.
+      pruneSessionInterval: 24 * 60 * 60,
+    }),
+    secret: process.env.SESSION_SECRET ?? "dev-secret-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 15 * 60 * 1000, // 15-min idle timeout (rolling resets on each request)
+    },
+  }),
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Auth routes are public (no requireAuth wrapper).
+app.use("/api/auth", authRouter);
+
+// All other /api/* routes require an active session, except /api/health.
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health") return next();
+  return requireAuth(req, res, next);
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

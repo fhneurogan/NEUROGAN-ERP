@@ -54,6 +54,20 @@ export function requireRole(...allowedRoles: readonly UserRole[]): RequestHandle
 // Used by GET /api/users/:id so a user can view themselves without ADMIN/QA.
 type SubjectIdGetter = (req: Parameters<RequestHandler>[0]) => string | undefined;
 
+// Reject any request whose body contains fields that carry identity — used on
+// regulated endpoints where identity must come from req.user.id (D-10).
+// Example: rejectIdentityInBody(["reviewedBy", "performedBy"])
+export function rejectIdentityInBody(fields: string[]): RequestHandler {
+  return (req, _res, next) => {
+    const body = req.body as Record<string, unknown>;
+    const present = fields.filter((f) => Object.prototype.hasOwnProperty.call(body, f));
+    if (present.length > 0) {
+      return next(errors.identityInBody(present));
+    }
+    return next();
+  };
+}
+
 export function requireRoleOrSelf(
   getSubjectUserId: SubjectIdGetter,
   ...allowedRoles: readonly UserRole[]
