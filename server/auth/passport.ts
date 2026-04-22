@@ -41,10 +41,8 @@ passport.serializeUser((user: Express.User, done) => {
 // Reload full user+roles from DB on every request so role/status changes
 // take effect without requiring re-login.
 passport.deserializeUser(async (id: string, done) => {
-  console.log(`[deserialize] called with id=${id}`);
   try {
     const response = await storage.getUserById(id);
-    console.log(`[deserialize] found=${!!response} status=${response?.status}`);
     if (!response || response.status !== "ACTIVE") return done(null, false);
     done(null, {
       id: response.id,
