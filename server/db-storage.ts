@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, gte, lte, inArray, type SQL } from "drizzle-orm";
+import { eq, ne, desc, asc, and, sql, gte, lte, inArray, type SQL } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import {
@@ -30,6 +30,7 @@ import {
   type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
+  type User, type UserResponse, type UserRole, type UserStatus,
 } from "@shared/schema";
 import type {
   IStorage,
@@ -42,7 +43,9 @@ import type {
   ActiveBatchDetail,
   OpenPODetail,
   LowStockItem,
+  CreateUserInput,
 } from "./storage";
+import { computeRoleDelta } from "./storage/users";
 
 export class DatabaseStorage implements IStorage {
 
@@ -1657,5 +1660,175 @@ export class DatabaseStorage implements IStorage {
     if (!bpr) throw new Error("BPR not found");
     const [row] = await db.insert(schema.bprDeviations).values({ ...data, bprId }).returning();
     return row;
+  }
+
+  // ─── Users & Roles (F-01) ──────────────────────────────────
+  //
+  // Identity helpers for the regulated system. Every read that returns a
+  // UserResponse strips passwordHash at the DB boundary — callers cannot
+  // accidentally leak the hash. getUserByEmail returns the full User
+  // (including passwordHash) and exists only for F-02's login flow.
+
+  private async fetchRolesByUserIds(userIds: string[]): Promise<Map<string, UserRole[]>> {
+    if (userIds.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.userRoles)
+      .where(inArray(schema.userRoles.userId, userIds));
+    const byUser = new Map<string, UserRole[]>();
+    for (const r of rows) {
+      const existing = byUser.get(r.userId);
+      if (existing) existing.push(r.role);
+      else byUser.set(r.userId, [r.role]);
+    }
+    return byUser;
+  }
+
+  private static toUserResponse(user: User, roles: readonly UserRole[]): UserResponse {
+    // Explicit destructure so passwordHash cannot be returned by accident.
+    const { passwordHash: _passwordHash, ...rest } = user;
+    void _passwordHash;
+    return { ...rest, roles: [...roles] };
+  }
+
+  async listUsers(): Promise<UserResponse[]> {
+    const rows = await db.select().from(schema.users).orderBy(asc(schema.users.fullName));
+    const rolesByUser = await this.fetchRolesByUserIds(rows.map((u) => u.id));
+    return rows.map((u) => DatabaseStorage.toUserResponse(u, rolesByUser.get(u.id) ?? []));
+  }
+
+  async getUserById(id: string): Promise<UserResponse | undefined> {
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.id, id));
+    if (!row) return undefined;
+    const rolesByUser = await this.fetchRolesByUserIds([id]);
+    return DatabaseStorage.toUserResponse(row, rolesByUser.get(id) ?? []);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [row] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, email.toLowerCase().trim()));
+    return row;
+  }
+
+  async createUser(data: CreateUserInput): Promise<UserResponse> {
+    // One transaction: insert user, insert role rows, return the user with
+    // roles attached. Duplicate email surfaces as a Postgres UNIQUE violation
+    // (error code 23505) which the route layer maps to errors.duplicateEmail.
+    return db.transaction(async (tx) => {
+      const [user] = await tx
+        .insert(schema.users)
+        .values({
+          email: data.email.toLowerCase().trim(),
+          fullName: data.fullName.trim(),
+          title: data.title ?? null,
+          passwordHash: data.passwordHash,
+          createdByUserId: data.createdByUserId,
+        })
+        .returning();
+
+      if (!user) throw new Error("createUser: insert returned no row");
+
+      if (data.roles.length > 0) {
+        // grantedByUserId falls back to the newly-created user only when
+        // bootstrapping the first ADMIN (no authenticated caller yet).
+        const grantedBy = data.grantedByUserId ?? user.id;
+        await tx.insert(schema.userRoles).values(
+          data.roles.map((role) => ({
+            userId: user.id,
+            role,
+            grantedByUserId: grantedBy,
+          })),
+        );
+      }
+
+      return DatabaseStorage.toUserResponse(user, data.roles);
+    });
+  }
+
+  async updateUserStatus(id: string, status: UserStatus): Promise<UserResponse | undefined> {
+    const [updated] = await db
+      .update(schema.users)
+      .set({ status })
+      .where(eq(schema.users.id, id))
+      .returning();
+    if (!updated) return undefined;
+    const rolesByUser = await this.fetchRolesByUserIds([id]);
+    return DatabaseStorage.toUserResponse(updated, rolesByUser.get(id) ?? []);
+  }
+
+  async setUserRoles(
+    userId: string,
+    nextRoles: readonly UserRole[],
+    grantedByUserId: string,
+  ): Promise<UserResponse | undefined> {
+    return db.transaction(async (tx) => {
+      const [user] = await tx.select().from(schema.users).where(eq(schema.users.id, userId));
+      if (!user) return undefined;
+
+      const currentRoleRows = await tx
+        .select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId));
+      const currentRoles = currentRoleRows.map((r) => r.role);
+      const delta = computeRoleDelta(currentRoles, nextRoles);
+
+      for (const role of delta.remove) {
+        await tx
+          .delete(schema.userRoles)
+          .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, role)));
+      }
+
+      if (delta.add.length > 0) {
+        await tx.insert(schema.userRoles).values(
+          delta.add.map((role) => ({
+            userId,
+            role,
+            grantedByUserId,
+          })),
+        );
+      }
+
+      // De-duplicate and sort so the response is deterministic.
+      const finalRoles = [...new Set(nextRoles)].sort();
+      return DatabaseStorage.toUserResponse(user, finalRoles);
+    });
+  }
+
+  async isLastActiveAdmin(userId: string): Promise<boolean> {
+    // "Is this user an active ADMIN AND no other user is an active ADMIN?"
+    // Two subqueries; cheap enough at Release 1 scale. The cost of getting
+    // this wrong is being unable to log into the system, so we keep the
+    // query explicit and auditable.
+
+    // 1. Does this user currently hold ACTIVE + ADMIN?
+    const [subject] = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .innerJoin(schema.userRoles, eq(schema.users.id, schema.userRoles.userId))
+      .where(
+        and(
+          eq(schema.users.id, userId),
+          eq(schema.users.status, "ACTIVE"),
+          eq(schema.userRoles.role, "ADMIN"),
+        ),
+      );
+    if (!subject) return false;
+
+    // 2. Count OTHER ACTIVE admins. If zero, userId is the last.
+    const rows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.users)
+      .innerJoin(schema.userRoles, eq(schema.users.id, schema.userRoles.userId))
+      .where(
+        and(
+          ne(schema.users.id, userId),
+          eq(schema.users.status, "ACTIVE"),
+          eq(schema.userRoles.role, "ADMIN"),
+        ),
+      );
+    const otherActiveAdmins = rows[0]?.count ?? 0;
+    return otherActiveAdmins === 0;
   }
 }

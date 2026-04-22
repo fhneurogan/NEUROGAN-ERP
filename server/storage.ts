@@ -27,7 +27,22 @@ import {
   type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
+  type User, type UserResponse, type UserRole, type UserStatus,
 } from "@shared/schema";
+
+// F-01: createUser takes the server-generated passwordHash (see
+// server/auth/password.ts) and the initial role list atomically. The caller
+// is responsible for setting createdByUserId and grantedByUserId from
+// req.user.id per AGENTS.md §4.4's "no identity from the body" rule.
+export interface CreateUserInput {
+  email: string;
+  fullName: string;
+  title?: string | null;
+  passwordHash: string;
+  roles: readonly UserRole[];
+  createdByUserId: string | null;
+  grantedByUserId: string | null;
+}
 
 export interface TransactionFilters {
   productId?: string;
@@ -265,20 +280,57 @@ export interface IStorage {
 
   // BPR Deviations
   addBprDeviation(bprId: string, data: InsertBprDeviation): Promise<BprDeviation>;
+
+  // ─── Users & Roles (F-01) ──────────────────────────────────
+  //
+  // listUsers / getUserById return UserResponse (no passwordHash). Only
+  // getUserByEmail returns the full User, for login flow use only; routes
+  // must never expose passwordHash.
+  listUsers(): Promise<UserResponse[]>;
+  getUserById(id: string): Promise<UserResponse | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(data: CreateUserInput): Promise<UserResponse>;
+  updateUserStatus(id: string, status: UserStatus): Promise<UserResponse | undefined>;
+  setUserRoles(
+    userId: string,
+    nextRoles: readonly UserRole[],
+    grantedByUserId: string,
+  ): Promise<UserResponse | undefined>;
+  // True iff `userId` holds the ADMIN role, their status is ACTIVE, and no
+  // OTHER user currently has an active ADMIN role. Route layer checks this
+  // before any operation that could remove the final administrator.
+  isLastActiveAdmin(userId: string): Promise<boolean>;
 }
 
 // DATABASE_URL is required. The legacy MemStorage fallback was removed —
 // it had no persistence, no audit trail, and no attribution, which makes it
 // fundamentally incompatible with 21 CFR §111.180 records retention and every
 // Part 11 control (see FDA/AGENTS.md §4.4 and FDA/erp-gap-analysis-and-roadmap.md §4.1).
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL is required. For local dev, see AGENTS.md §2 (cp .env.example .env.local, " +
-    "then fill in DATABASE_URL). For Railway deploys, ensure the Postgres service is linked " +
-    "to this environment (both staging and production have it — check railway.json)."
-  );
-}
+//
+// The check is deferred to first storage-method access via a Proxy so that
+// vitest can import this module (and anything that depends on it) without
+// booting against a real DB. The spec D-09 "no-migrations-on-boot" rule
+// implies booting the server should be side-effect-light; this matches.
 
 import { DatabaseStorage } from "./db-storage";
 
-export const storage: IStorage = new DatabaseStorage();
+let _instance: IStorage | null = null;
+function getStorage(): IStorage {
+  if (_instance) return _instance;
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "DATABASE_URL is required. For local dev, see AGENTS.md §2 " +
+        "(cp .env.example .env.local, then fill in DATABASE_URL). For Railway " +
+        "deploys, ensure the Postgres service is linked to this environment " +
+        "(both staging and production have it — check railway.json).",
+    );
+  }
+  _instance = new DatabaseStorage();
+  return _instance;
+}
+
+export const storage: IStorage = new Proxy({} as IStorage, {
+  get(_target, prop) {
+    return Reflect.get(getStorage(), prop);
+  },
+});

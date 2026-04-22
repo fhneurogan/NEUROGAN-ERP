@@ -42,8 +42,10 @@ Populate one table row per URS item. Copy the template when adding.
 
 | ID | Requirement | Source | Status |
 |---|---|---|---|
-| URS-F-01-01 | System shall maintain unique identification of every user who performs regulated actions. | Part 11 §11.10(d) | DRAFT |
-| URS-F-01-02 | System shall allow role assignment (ADMIN / QA / PRODUCTION / RECEIVING / VIEWER) and prevent privilege escalation without ADMIN action. | §111.8, Part 11 §11.10(g) | DRAFT |
+| URS-F-01-01 | System shall maintain unique identification of every user who performs regulated actions. | Part 11 §11.10(d) | IMPLEMENTED (F-01) |
+| URS-F-01-02 | System shall allow role assignment (ADMIN / QA / PRODUCTION / RECEIVING / VIEWER) and prevent privilege escalation without ADMIN action. | §111.8, Part 11 §11.10(g) | IMPLEMENTED (F-01) |
+| URS-F-01-03 | System shall prevent the removal of administrative access from the last active administrator (retain at least one ADMIN at all times). | Part 11 §11.10(g) | IMPLEMENTED (F-01) |
+| URS-F-01-04 | System shall disable, rather than delete, user accounts to preserve the audit trail. | §111.180, §111.605 | IMPLEMENTED (F-01) |
 | URS-F-02-01 | System shall authenticate users before any regulated action. | Part 11 §11.10(d) | DRAFT |
 | URS-F-02-02 | System shall apply a password policy consistent with NIST 800-63B guidance. | Part 11 §11.300 | DRAFT |
 | URS-F-02-03 | System shall automatically log users out after 15 minutes of inactivity. | Part 11 §11.10(d) | DRAFT |
@@ -92,7 +94,11 @@ FRS items describe *what the software does* to meet a URS. One FRS may serve mul
 
 | ID | Function | Satisfies URS | Status |
 |---|---|---|---|
-| FRS-F-01-01 | `POST /api/users` creates a user with at least one role; email unique. | URS-F-01-01, 01-02 | DRAFT |
+| FRS-F-01-01 | `POST /api/users` creates a user with at least one role; email unique; returns a one-time temporary password the admin shows to the user. | URS-F-01-01, 01-02 | IMPLEMENTED (F-01) |
+| FRS-F-01-02 | `PATCH /api/users/:id/roles` accepts `{ add?, remove? }`, computes the delta against current roles, applies atomically; refuses with `LAST_ADMIN` (409) if the change removes ADMIN from the only active administrator. | URS-F-01-02, 01-03 | IMPLEMENTED (F-01) |
+| FRS-F-01-03 | `PATCH /api/users/:id/status` transitions between ACTIVE and DISABLED; refuses with `SELF_DISABLE` (409) on self, `LAST_ADMIN` (409) on disabling the only active administrator. | URS-F-01-03, 01-04 | IMPLEMENTED (F-01) |
+| FRS-F-01-04 | `GET /api/users` and `GET /api/users/:id` return `UserResponse` (never `passwordHash`); admin-only fields (`passwordChangedAt`, `lockedUntil`, `failedLoginCount`) are redacted for QA viewers. | URS-F-01-01 | IMPLEMENTED (F-01) |
+| FRS-F-01-05 | Role-gate middleware (`requireAuth`, `requireRole`, `requireRoleOrSelf`) returns 401 on missing session and 403 on role mismatch. Defined in F-01; mounted globally by F-02. | URS-F-01-02 | IMPLEMENTED (F-01) |
 | FRS-F-02-01 | `POST /api/auth/login` authenticates via `passport-local`; sets session cookie; increments failure count on wrong password; locks after 5. | URS-F-02-01, 02-04 | DRAFT |
 | FRS-F-02-02 | `POST /api/auth/rotate-password` validates policy, writes new argon2 hash, updates `passwordChangedAt`. | URS-F-02-02 | DRAFT |
 | FRS-F-02-03 | Session middleware sets 15-minute rolling idle timeout; server destroys on timeout. | URS-F-02-03 | DRAFT |
@@ -111,7 +117,11 @@ DS items describe *how the software is implemented*. Types, tables, columns, mid
 
 | ID | Design element | Satisfies FRS | Status |
 |---|---|---|---|
-| DS-F-01-01 | `erp_users` table shape (per F-01 in build spec); `erp_user_roles` composite PK. | FRS-F-01-01 | DRAFT |
+| DS-F-01-01 | `erp_users` + `erp_user_roles` tables (composite PK on `(user_id, role)`; FK to `users.id` for both `user_id` and `granted_by_user_id`); `userRoleEnum` and `userStatusEnum` as Zod text unions per AGENTS.md §5.2. Baseline migration `0000_baseline.sql` snapshots the pre-F-01 schema; `0001_f01_users_and_roles.sql` adds the F-01 tables. | FRS-F-01-01, 01-02, 01-03 | IMPLEMENTED (F-01) |
+| DS-F-01-02 | `server/storage/users.ts` exports pure `computeRoleDelta(current, next)` (order-independent, idempotent, dedup). `server/db-storage.ts` implements `listUsers`, `getUserById`, `getUserByEmail`, `createUser`, `updateUserStatus`, `setUserRoles`, `isLastActiveAdmin`. Regulated writes in transactions; `passwordHash` stripped at the DB boundary by `toUserResponse`. | FRS-F-01-01, 01-02, 01-03, 01-04 | IMPLEMENTED (F-01) |
+| DS-F-01-03 | `server/auth/password.ts` wraps argon2id (`memoryCost: 64 MiB`, `timeCost: 3`, `parallelism: 2` per D-02). Exports `hashPassword`, `verifyPassword`, `generateTemporaryPassword` (16 bytes base64url; ≥ 22 chars). | FRS-F-01-01 | IMPLEMENTED (F-01) |
+| DS-F-01-04 | `server/auth/middleware.ts` exports `requireAuth`, `requireRole`, `requireRoleOrSelf`. `server/types/express.d.ts` declares the global `Express.Request.user` augmentation. | FRS-F-01-05 | IMPLEMENTED (F-01) |
+| DS-F-01-05 | `server/errors.ts` defines `AppError` + `ErrorCode` union + convenience constructors (`errors.unauthenticated()`, `errors.forbidden()`, `errors.duplicateEmail()`, `errors.lastAdmin()`, `errors.selfDisable()`, etc). `server/error-middleware.ts` renders `AppError` as `{ error: { code, message, details? } }` with the appropriate HTTP status; renders `ZodError` as 422 `VALIDATION_FAILED`. Mounted from both `server/index.ts` and the integration-test harness. | FRS-F-01-01 through 01-05 | IMPLEMENTED (F-01) |
 | DS-F-02-01 | `passport-local` strategy in `server/auth/strategies.ts` verifies argon2 hash; `serializeUser` stores `user.id` only. | FRS-F-02-01 | DRAFT |
 | DS-F-02-02 | `express-session` with `connect-pg-simple`; cookie `secure`, `httpOnly`, `sameSite=lax`, `maxAge=15m` rolling. | FRS-F-02-01, 02-03 | DRAFT |
 | DS-F-03-01 | `erp_audit_trail` table owned by schema owner; `INSERT`-only grant to app role; `CHECK (occurred_at <= now() + '1 minute')`. | FRS-F-03-01 | DRAFT |
@@ -174,7 +184,10 @@ One row per URS. Fill as tickets close. Row is complete when all five columns re
 
 | URS | FRS | DS | Test (OQ) | 483 Observation |
 |---|---|---|---|---|
-| URS-F-01-01 | FRS-F-01-01 | DS-F-01-01 | OQ-F-01-01 | Cross-cutting |
+| URS-F-01-01 | FRS-F-01-01, 01-04 | DS-F-01-01, 01-02, 01-03 | OQ-F-01-01 | Cross-cutting |
+| URS-F-01-02 | FRS-F-01-02, 01-05 | DS-F-01-01, 01-02, 01-04 | OQ-F-01-02 | Cross-cutting |
+| URS-F-01-03 | FRS-F-01-02, 01-03 | DS-F-01-02 | OQ-F-01-03 | Cross-cutting |
+| URS-F-01-04 | FRS-F-01-03 | DS-F-01-02 | OQ-F-01-04 | Cross-cutting (§111.180) |
 | URS-F-02-01 | FRS-F-02-01 | DS-F-02-01 | OQ-F-02-01 | Cross-cutting |
 | URS-F-02-02 | FRS-F-02-02 | DS-F-02-02 | OQ-F-02-02 | Cross-cutting |
 | URS-F-03-01 | FRS-F-03-01 | DS-F-03-01 | OQ-F-03-01 | Cross-cutting (§111.180) |
