@@ -121,7 +121,18 @@ function LogTransactionSheet({
 
   const schema = txType === "PRODUCTION_CONSUMPTION" ? productionSchema : adjustmentSchema;
 
+  // NOTE(F-00-e): the `any` casts below and throughout this component reflect
+  // a real form-schema-union design issue: react-hook-form's generic expects
+  // ONE schema, but this component swaps between `productionSchema` (has
+  // `productionBatchId`) and `adjustmentSchema` (does not) based on txType.
+  // Properly resolving this requires either (a) splitting into two separate
+  // <LogTransactionSheet> components with their own useForm calls, or
+  // (b) widening the schema into a discriminated union and adjusting
+  // defaultValues/reset/field names to match. Both are bigger than F-00-e's
+  // scope (install lint, not refactor form architecture). Tracked as follow-up.
+
   const form = useForm<z.infer<typeof schema>>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form-schema-union, see note above
     resolver: zodResolver(schema as any),
     defaultValues: {
       productId: "",
@@ -130,6 +141,7 @@ function LogTransactionSheet({
       locationId: "",
       notes: "",
       productionBatchId: "",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form-schema-union
     } as any,
   });
 
@@ -149,6 +161,7 @@ function LogTransactionSheet({
 
   // Reset lot when product changes
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form-schema-union
     (form as any).setValue("lotId", "");
   }, [selectedProductId]);
 
@@ -161,10 +174,12 @@ function LogTransactionSheet({
       locationId: "",
       notes: "",
       productionBatchId: "",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form-schema-union
     } as any);
   }, [txType]);
 
   const txMutation = useMutation({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form-schema-union; values shape depends on txType
     mutationFn: async (values: any) => {
       let qty = parseFloat(values.quantity);
       if (txType === "PRODUCTION_CONSUMPTION") {
@@ -251,6 +266,7 @@ function LogTransactionSheet({
               {/* Lot dropdown */}
               <FormField
                 control={form.control}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form-schema-union
                 name={"lotId" as any}
                 render={({ field }) => (
                   <FormItem>
@@ -333,6 +349,7 @@ function LogTransactionSheet({
               {txType === "PRODUCTION_CONSUMPTION" && (
                 <FormField
                   control={form.control}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- form-schema-union
                   name={"productionBatchId" as any}
                   render={({ field }) => (
                     <FormItem>

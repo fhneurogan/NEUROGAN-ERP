@@ -36,11 +36,13 @@ import {
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
 import { formatDate, formatDateTime } from "@/lib/formatDate";
-import type { ReceivingRecordWithDetails, CoaDocumentWithDetails } from "@shared/schema";
+import type {
+  ReceivingRecordWithDetails,
+  CoaDocumentWithDetails,
+  PurchaseOrderWithDetails,
+} from "@shared/schema";
 
 // ── Status badge ──
-
-type ReceivingStatus = "QUARANTINED" | "SAMPLING" | "PENDING_QC" | "APPROVED" | "REJECTED" | "ON_HOLD";
 
 function receivingStatusBadge(status: string) {
   switch (status) {
@@ -873,14 +875,14 @@ export default function Receiving() {
   });
 
   // Fetch open POs (SUBMITTED or PARTIALLY_RECEIVED)
-  const { data: allPOs } = useQuery<any[]>({
+  const { data: allPOs } = useQuery<PurchaseOrderWithDetails[]>({
     queryKey: ["/api/purchase-orders"],
     refetchOnWindowFocus: true,
     staleTime: 0,
   });
-  const submittedPOs = useMemo(() =>
-    (allPOs ?? []).filter((po: any) => po.status === "SUBMITTED" || po.status === "PARTIALLY_RECEIVED"),
-    [allPOs]
+  const submittedPOs = useMemo(
+    () => (allPOs ?? []).filter((po) => po.status === "SUBMITTED" || po.status === "PARTIALLY_RECEIVED"),
+    [allPOs],
   );
 
   const filteredRecords = useMemo(() => {
@@ -991,7 +993,7 @@ export default function Receiving() {
                   <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 border-b">
                     Awaiting Receipt ({submittedPOs.length})
                   </div>
-                  {submittedPOs.map((po: any) => (
+                  {submittedPOs.map((po) => (
                     <button
                       key={po.id}
                       className="w-full text-left px-3 py-2.5 border-b border-border/50 hover:bg-muted/50 transition-colors"

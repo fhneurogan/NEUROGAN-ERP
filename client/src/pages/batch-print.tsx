@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -22,7 +21,6 @@ function formatPerUnit(total: number, units: number): string {
 export default function BatchPrint() {
   const [, params] = useRoute("/production/print/:id");
   const batchId = params?.id;
-  const hasPrinted = useRef(false);
 
   const {
     data: batch,
@@ -51,7 +49,6 @@ export default function BatchPrint() {
 
   const recipe = recipes && recipes.length > 0 ? recipes[0] : null;
   const isLoading = batchLoading || recipesLoading;
-  const dataReady = !!batch && !batchLoading && !recipesLoading;
 
   const triggerPrint = () => {
     // Clone the print content and open in a new window to bypass iframe restrictions
