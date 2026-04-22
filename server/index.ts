@@ -60,18 +60,6 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Temporary session-trace debug logging — remove after diagnosing 401
-app.use("/api/auth", (req, _res, next) => {
-  const passportUser = (req.session as unknown as { passport?: { user?: unknown } })?.passport?.user;
-  console.log(
-    `[session-trace] ${req.method} ${req.path}` +
-    ` | sid=${req.sessionID ?? "NONE"}` +
-    ` | passport.user=${JSON.stringify(passportUser) ?? "NONE"}` +
-    ` | req.user=${req.user ? (req.user as { id: string }).id : "NONE"}`,
-  );
-  next();
-});
-
 // Auth routes are public (no requireAuth wrapper).
 app.use("/api/auth", authRouter);
 
