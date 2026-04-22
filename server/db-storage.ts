@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, gte, lte, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, sql, gte, lte, inArray, type SQL } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import {
@@ -129,7 +129,7 @@ export class DatabaseStorage implements IStorage {
   // ─── Transactions ────────────────────────────────────
 
   async getTransactions(filters?: TransactionFilters): Promise<TransactionWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
 
     if (filters?.lotId) {
       conditions.push(eq(schema.transactions.lotId, filters.lotId));
@@ -305,7 +305,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPurchaseOrders(filters?: { status?: string; supplierId?: string }): Promise<PurchaseOrderWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.purchaseOrders.status, filters.status));
     if (filters?.supplierId) conditions.push(eq(schema.purchaseOrders.supplierId, filters.supplierId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -443,7 +443,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductionBatches(filters?: { status?: string }): Promise<ProductionBatchWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.productionBatches.status, filters.status));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const batches = await db.select().from(schema.productionBatches).where(whereClause).orderBy(desc(schema.productionBatches.createdAt));
@@ -995,7 +995,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecipes(productId?: string): Promise<RecipeWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (productId) conditions.push(eq(schema.recipes.productId, productId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const rows = await db.select().from(schema.recipes).where(whereClause);
@@ -1374,7 +1374,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReceivingRecords(filters?: { status?: string }): Promise<ReceivingRecordWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.receivingRecords.status, filters.status));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const records = await db.select().from(schema.receivingRecords).where(whereClause).orderBy(desc(schema.receivingRecords.createdAt));
@@ -1452,7 +1452,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCoaDocuments(filters?: { lotId?: string; productionBatchId?: string; sourceType?: string; overallResult?: string }): Promise<CoaDocumentWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.lotId) conditions.push(eq(schema.coaDocuments.lotId, filters.lotId));
     if (filters?.productionBatchId) conditions.push(eq(schema.coaDocuments.productionBatchId, filters.productionBatchId));
     if (filters?.sourceType) conditions.push(eq(schema.coaDocuments.sourceType, filters.sourceType));
@@ -1503,7 +1503,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (supplierId) conditions.push(eq(schema.supplierQualifications.supplierId, supplierId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const rows = await db.select().from(schema.supplierQualifications).where(whereClause).orderBy(desc(schema.supplierQualifications.createdAt));
@@ -1542,7 +1542,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBprs(filters?: { status?: string; productionBatchId?: string }): Promise<BprWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.batchProductionRecords.status, filters.status));
     if (filters?.productionBatchId) conditions.push(eq(schema.batchProductionRecords.productionBatchId, filters.productionBatchId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

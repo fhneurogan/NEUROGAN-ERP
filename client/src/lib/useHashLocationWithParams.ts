@@ -35,7 +35,7 @@ function currentHashPath(): string {
 }
 
 // Navigate: put everything (path + query) into the hash
-function navigateHash(to: string, { state = null, replace = false }: { state?: any; replace?: boolean } = {}) {
+function navigateHash(to: string, { state = null, replace = false }: { state?: unknown; replace?: boolean } = {}) {
   const oldURL = location.href;
 
   // Clean the path and keep query params together in the hash
@@ -71,5 +71,9 @@ export function useHashLocationWithParams({ ssrPath = "/" } = {}): [string, type
   return [path, navigateHash];
 }
 
-// Tell wouter how to format href attributes
-(useHashLocationWithParams as any).hrefs = (href: string) => "#" + href;
+// Tell wouter how to format href attributes. Wouter reads a `.hrefs` property
+// off the hook it was given via its useLocationProperty mechanism; TypeScript
+// can't express "a hook with a static method" cleanly, so we augment at the
+// type level here.
+(useHashLocationWithParams as typeof useHashLocationWithParams & { hrefs: (href: string) => string }).hrefs =
+  (href: string) => "#" + href;

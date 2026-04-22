@@ -482,8 +482,9 @@ function CreatePOSheet({
       setNewMaterialSku("");
       setNewMaterialCategory("ACTIVE_INGREDIENT");
       setNewMaterialUom("g");
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setCreatingMaterial(false);
     }
@@ -516,8 +517,9 @@ function CreatePOSheet({
       setNewSupplierName("");
       setNewSupplierEmail("");
       setNewSupplierPhone("");
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setCreatingSupplier(false);
     }
@@ -1259,8 +1261,9 @@ function ReceiveSheet({
         description: `${itemsToReceive.length} line item${itemsToReceive.length > 1 ? "s" : ""} received for ${po.poNumber}.`,
       });
       onOpenChange(false);
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }

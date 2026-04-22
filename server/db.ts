@@ -28,6 +28,6 @@ export function getDb() {
 // For backwards compatibility, also export as db (lazy getter)
 export const db = new Proxy({} as ReturnType<typeof drizzle>, {
   get(_target, prop) {
-    return (getDb() as any)[prop];
+    return Reflect.get(getDb(), prop);
   },
 });

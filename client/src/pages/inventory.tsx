@@ -78,6 +78,7 @@ import type {
   ProductCategory,
   RecipeWithDetails,
   Location,
+  Lot,
 } from "@shared/schema";
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -779,7 +780,7 @@ function CreateMaterialDialog({
       });
       const product = await res.json();
       // Create lot if lotNumber is provided
-      let lot: any = null;
+      let lot: Lot | null = null;
       if (lotNumber.trim()) {
         const lotRes = await apiRequest("POST", "/api/lots", {
           productId: product.id,
