@@ -13,6 +13,12 @@ import { getPool } from "./db";
 const app = express();
 const httpServer = createServer(app);
 
+// Railway (and most PaaS) terminate TLS at the edge and forward plain HTTP
+// to the Node process. Without this, req.secure === false and express-session
+// skips setting the Set-Cookie header on Secure cookies, so browsers never
+// receive the session cookie and every request after login returns 401.
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
