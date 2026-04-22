@@ -17,6 +17,8 @@ import Production from "@/pages/production";
 import Receiving from "@/pages/receiving";
 import CoaLibrary from "@/pages/coa-library";
 import Settings from "@/pages/settings";
+import SettingsUsers from "@/pages/settings-users";
+import Profile from "@/pages/profile";
 import SupplyChain from "@/pages/supply-chain";
 import BatchPrint from "@/pages/batch-print";
 import SkuManager from "@/pages/sku-manager";
@@ -122,7 +124,9 @@ function AppLayout() {
           <Route path="/production" component={Production} />
           <Route path="/transactions" component={Transactions} />
           <Route path="/sku-manager" component={SkuManager} />
+          <Route path="/settings/users" component={SettingsUsers} />
           <Route path="/settings" component={Settings} />
+          <Route path="/profile" component={Profile} />
           <Route component={NotFound} />
         </Switch>
       </main>
