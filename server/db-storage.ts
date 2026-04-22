@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, gte, lte, inArray, ilike, ne } from "drizzle-orm";
+import { eq, desc, asc, and, sql, gte, lte, inArray } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import {
@@ -9,13 +9,13 @@ import {
   type InventoryGrouped,
   type Supplier, type InsertSupplier,
   type PurchaseOrder, type InsertPurchaseOrder,
-  type POLineItem, type InsertPOLineItem,
+  type InsertPOLineItem,
   type PurchaseOrderWithDetails, type POLineItemWithProduct,
   type ProductionBatch, type InsertProductionBatch,
-  type ProductionInput, type InsertProductionInput,
+  type InsertProductionInput,
   type ProductionBatchWithDetails, type ProductionInputWithDetails,
   type Recipe, type InsertRecipe,
-  type RecipeLine, type InsertRecipeLine,
+  type InsertRecipeLine,
   type RecipeWithDetails, type RecipeLineWithDetails,
   type AppSettings, type InsertAppSettings,
   type ProductCategory, type InsertProductCategory,
@@ -42,7 +42,6 @@ import type {
   ActiveBatchDetail,
   OpenPODetail,
   LowStockItem,
-  InboundPO,
 } from "./storage";
 
 export class DatabaseStorage implements IStorage {
@@ -400,11 +399,6 @@ export class DatabaseStorage implements IStorage {
     await db.update(schema.poLineItems).set({ quantityReceived: String(newReceived) }).where(eq(schema.poLineItems.id, lineItemId));
 
     // Auto-update PO status
-    const allLineItems = await db.select().from(schema.poLineItems).where(eq(schema.poLineItems.purchaseOrderId, po.id));
-    const allFullyReceived = allLineItems.every(
-      li => parseFloat(li.quantityReceived) >= parseFloat(li.quantityOrdered)
-    );
-    // Re-check after update
     const updatedLineItems = await db.select().from(schema.poLineItems).where(eq(schema.poLineItems.purchaseOrderId, po.id));
     const allFull = updatedLineItems.every(
       li => parseFloat(li.quantityReceived) >= parseFloat(li.quantityOrdered)

@@ -163,8 +163,13 @@ function BatchListItem({
 }
 
 // ── Create/Edit batch form schema ──
+//
+// NOTE(F-00-e): `_createBatchSchema` is retained as a const with `_` prefix so
+// ESLint ignores "unused" — it is not currently passed to `useForm({resolver})`,
+// so it's only used to derive the form's value type. A follow-up ticket should
+// wire it into useForm via zodResolver to actually validate at submit time.
 
-const createBatchSchema = z.object({
+const _createBatchSchema = z.object({
   batchNumber: z.string().min(1, "Batch number required"),
   productId: z.string().min(1, "Product required"),
   plannedQuantity: z.string().min(1, "Planned quantity required"),
@@ -172,7 +177,7 @@ const createBatchSchema = z.object({
   notes: z.string().optional(),
 });
 
-type CreateBatchForm = z.infer<typeof createBatchSchema>;
+type CreateBatchForm = z.infer<typeof _createBatchSchema>;
 
 
 // ── Create/Edit Batch Sheet ──
@@ -181,8 +186,8 @@ function CreateBatchSheet({
   open,
   onOpenChange,
   products,
-  inventory,
-  locations,
+  inventory: _inventory,
+  locations: _locations,
   editBatch,
 }: {
   open: boolean;
@@ -973,7 +978,7 @@ function CompleteBatchDialog({
         if (jsonStart >= 0) {
           try {
             const parsed = JSON.parse(errMsg.slice(jsonStart));
-            throw new Error(parsed.message || errMsg);
+            throw new Error(parsed.message || errMsg, { cause: err });
           } catch (parseErr) {
             if (parseErr instanceof Error && parseErr.message !== errMsg) throw parseErr;
           }
@@ -1221,7 +1226,15 @@ function ConfirmDialog({
 }
 
 // ── BPR Link ──
+//
+// NOTE(F-00-e): BprLink is fully-formed BPR-viewing logic that will be
+// referenced from BatchDetail in a future ticket. Deleting would mean
+// re-authoring the /api/batch-production-records/by-batch query + the View
+// Batch Record button styling. The eslint-disable below preserves the code
+// without having to rename it (React components must start with an uppercase
+// letter for the rules-of-hooks check to recognise useQuery's caller).
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function BprLink({ batchId, batchStatus }: { batchId: string; batchStatus: string }) {
   const showBpr = ["IN_PROGRESS", "ON_HOLD", "COMPLETED", "SCRAPPED"].includes(batchStatus);
 

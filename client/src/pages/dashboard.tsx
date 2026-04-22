@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
 import { formatDate } from "@/lib/formatDate";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 
 // ─── Types ───────────────────────────────────────────
 
@@ -190,7 +190,6 @@ function DashboardSkeleton() {
 // ─── Dashboard ───────────────────────────────────────
 
 export default function Dashboard() {
-  const [, setLocation] = useLocation();
   const { data, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard"],
   });

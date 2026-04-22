@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch as SwitchUI } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -47,7 +46,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
-import { Save, Building2, AlertTriangle, Hash, Tag, Plus, Pencil, Trash2, Package } from "lucide-react";
+import { Save, Building2, Hash, Tag, Plus, Pencil, Trash2 } from "lucide-react";
 import type { Location } from "@shared/schema";
 
 // ─── Types ──────────────────────────────────────────────────

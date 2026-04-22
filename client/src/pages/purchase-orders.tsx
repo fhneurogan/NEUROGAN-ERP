@@ -56,7 +56,6 @@ import { DateInput } from "@/components/ui/date-input";
 import { formatDate } from "@/lib/formatDate";
 import type {
   PurchaseOrderWithDetails,
-  POLineItemWithProduct,
   Supplier,
   Product,
   Location,

@@ -13,8 +13,6 @@ import {
   insertRecipeSchema,
   insertProductCategorySchema,
   insertProductionNoteSchema,
-  insertSupplierDocumentSchema,
-  insertReceivingRecordSchema,
   insertCoaDocumentSchema,
   insertSupplierQualificationSchema,
   insertBprSchema,

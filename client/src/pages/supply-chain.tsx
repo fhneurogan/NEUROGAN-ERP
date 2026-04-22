@@ -28,7 +28,7 @@ import {
 import { Search, Package, AlertTriangle, FlaskConical, TrendingUp, Truck, Beaker, ArrowRight, Zap } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
 import { Link } from "wouter";
-import type { ProductCapacity, ProductCategory, MaterialCapacity } from "@shared/schema";
+import type { ProductCapacity, ProductCategory } from "@shared/schema";
 
 // ── Category badge color palette ────────────────────────
 

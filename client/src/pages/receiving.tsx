@@ -40,8 +40,6 @@ import type { ReceivingRecordWithDetails, CoaDocumentWithDetails } from "@shared
 
 // ── Status badge ──
 
-type ReceivingStatus = "QUARANTINED" | "SAMPLING" | "PENDING_QC" | "APPROVED" | "REJECTED" | "ON_HOLD";
-
 function receivingStatusBadge(status: string) {
   switch (status) {
     case "QUARANTINED":

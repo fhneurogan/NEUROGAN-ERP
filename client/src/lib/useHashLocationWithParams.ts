@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useCallback } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Custom hash location hook for wouter that supports query params in the hash.
@@ -40,7 +40,6 @@ function navigateHash(to: string, { state = null, replace = false }: { state?: a
 
   // Clean the path and keep query params together in the hash
   const cleanTo = to.replace(/^#?\/?/, "");
-  const newHash = "#/" + cleanTo;
 
   // Build the new URL preserving existing search params from the real URL
   const url = new URL(location.href);
