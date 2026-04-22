@@ -27,7 +27,22 @@ import {
   type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
+  type User, type UserResponse, type UserRole, type UserStatus,
 } from "@shared/schema";
+
+// F-01: createUser takes the server-generated passwordHash (see
+// server/auth/password.ts) and the initial role list atomically. The caller
+// is responsible for setting createdByUserId and grantedByUserId from
+// req.user.id per AGENTS.md §4.4's "no identity from the body" rule.
+export interface CreateUserInput {
+  email: string;
+  fullName: string;
+  title?: string | null;
+  passwordHash: string;
+  roles: readonly UserRole[];
+  createdByUserId: string | null;
+  grantedByUserId: string | null;
+}
 
 export interface TransactionFilters {
   productId?: string;
@@ -265,6 +280,26 @@ export interface IStorage {
 
   // BPR Deviations
   addBprDeviation(bprId: string, data: InsertBprDeviation): Promise<BprDeviation>;
+
+  // ─── Users & Roles (F-01) ──────────────────────────────────
+  //
+  // listUsers / getUserById return UserResponse (no passwordHash). Only
+  // getUserByEmail returns the full User, for login flow use only; routes
+  // must never expose passwordHash.
+  listUsers(): Promise<UserResponse[]>;
+  getUserById(id: string): Promise<UserResponse | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(data: CreateUserInput): Promise<UserResponse>;
+  updateUserStatus(id: string, status: UserStatus): Promise<UserResponse | undefined>;
+  setUserRoles(
+    userId: string,
+    nextRoles: readonly UserRole[],
+    grantedByUserId: string,
+  ): Promise<UserResponse | undefined>;
+  // True iff `userId` holds the ADMIN role, their status is ACTIVE, and no
+  // OTHER user currently has an active ADMIN role. Route layer checks this
+  // before any operation that could remove the final administrator.
+  isLastActiveAdmin(userId: string): Promise<boolean>;
 }
 
 // DATABASE_URL is required. The legacy MemStorage fallback was removed —
