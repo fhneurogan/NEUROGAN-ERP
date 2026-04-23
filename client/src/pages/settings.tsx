@@ -583,6 +583,7 @@ function LocationsContent() {
 
 const LazySkuManager = lazy(() => import("@/pages/sku-manager"));
 const LazySettingsUsers = lazy(() => import("@/pages/settings-users"));
+const LazyValidationList = lazy(() => import("@/pages/quality/ValidationList"));
 
 function SkuManagerEmbed() {
   return (
@@ -600,7 +601,15 @@ function UsersEmbed() {
   );
 }
 
-type SettingsTab = "settings" | "locations" | "sku-manager" | "users";
+function ValidationEmbed() {
+  return (
+    <Suspense fallback={<div className="p-6"><Skeleton className="h-96 w-full" /></div>}>
+      <LazyValidationList />
+    </Suspense>
+  );
+}
+
+type SettingsTab = "settings" | "locations" | "sku-manager" | "users" | "validation";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
@@ -663,6 +672,19 @@ export default function Settings() {
               Users
             </button>
           )}
+          {(isAdmin || (user?.roles?.includes("QA") ?? false)) && (
+            <button
+              onClick={() => setActiveTab("validation")}
+              data-testid="tab-validation"
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+                activeTab === "validation"
+                  ? "bg-background text-foreground border-border"
+                  : "bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              System Validation
+            </button>
+          )}
         </div>
       </div>
 
@@ -672,6 +694,7 @@ export default function Settings() {
         {activeTab === "locations" && <LocationsContent />}
         {activeTab === "sku-manager" && <SkuManagerEmbed />}
         {activeTab === "users" && isAdmin && <UsersEmbed />}
+        {activeTab === "validation" && <ValidationEmbed />}
       </div>
     </div>
   );

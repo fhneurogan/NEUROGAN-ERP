@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SignatureCeremony } from "@/components/SignatureCeremony";
 import { useToast } from "@/hooks/use-toast";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Signature {
   fullNameAtSigning: string;
@@ -47,7 +49,7 @@ async function signDoc(id: string, password: string, commentary: string): Promis
 }
 
 export default function ValidationDetail() {
-  const [, params] = useRoute("/quality/validation/:id");
+  const [, params] = useRoute("/settings/validation/:id");
   const [, navigate] = useLocation();
   const id = params?.id ?? "";
   const queryClient = useQueryClient();
@@ -81,10 +83,10 @@ export default function ValidationDetail() {
     <div className="p-6 max-w-4xl mx-auto">
       {/* Back link */}
       <button
-        onClick={() => navigate("/quality/validation")}
+        onClick={() => navigate("/settings")}
         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to validation documents
+        <ArrowLeft className="h-4 w-4" /> Back to Settings
       </button>
 
       <div className="flex items-start justify-between mb-6">
@@ -101,9 +103,15 @@ export default function ValidationDetail() {
         )}
       </div>
 
-      {/* Document content — rendered as monospace preformatted text */}
-      <div className="border rounded-lg p-6 bg-card font-mono text-sm whitespace-pre-wrap leading-relaxed mb-8">
-        {doc.content}
+      {/* Document content */}
+      <div className="border rounded-lg p-8 bg-card mb-8">
+        <div className="prose prose-sm dark:prose-invert max-w-none
+          prose-headings:font-semibold prose-headings:tracking-tight
+          prose-h1:text-xl prose-h2:text-base prose-h3:text-sm
+          prose-table:text-xs prose-td:py-2 prose-th:py-2
+          prose-code:text-xs prose-code:bg-muted prose-code:px-1 prose-code:rounded prose-code:font-mono">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
+        </div>
       </div>
 
       {/* Signature block — only for SIGNED docs */}
