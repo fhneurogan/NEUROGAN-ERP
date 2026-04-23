@@ -43,13 +43,14 @@ const httpServer = createServer(app);
 // receive the session cookie and every request after login returns 401.
 app.set("trust proxy", 1);
 
-// F-07: CORS — allowlist only; no wildcard.
-app.use(corsMiddleware(ALLOWED_ORIGINS));
-
-// F-07: Helmet — security headers + strict CSP.
+// F-07: Helmet — security headers + strict CSP (applied globally).
 app.use(helmetMiddleware(ALLOWED_ORIGINS));
 
-// F-07: Rate limiting.
+// F-07: CORS + rate limiting apply only to /api routes.
+// Static assets use relative URLs (same-origin) so CORS is irrelevant there;
+// applying it globally caused the browser's crossorigin attribute on <script>/<link>
+// to trigger CORS preflight/rejection for same-domain asset fetches.
+app.use("/api", corsMiddleware(ALLOWED_ORIGINS));
 app.use("/api/auth", authRateLimiter());
 app.use("/api", apiRateLimiter());
 
