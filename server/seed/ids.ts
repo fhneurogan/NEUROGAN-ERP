@@ -84,6 +84,12 @@ export const seedIds = {
     proUroUa:       "00000000-0000-000b-0000-000000000001",
     proUroGelcaps:  "00000000-0000-000b-0000-000000000002",
   },
+  validationDocuments: {
+    iqPlatform:  "00000000-0000-000c-0000-000000000001",
+    oqPlatform:  "00000000-0000-000c-0000-000000000002",
+    pqPlatform:  "00000000-0000-000c-0000-000000000003",
+    vsrPlatform: "00000000-0000-000c-0000-000000000004",
+  },
 } as const;
 
 export type SeedIds = typeof seedIds;
