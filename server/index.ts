@@ -10,6 +10,29 @@ import { passport } from "./auth/passport";
 import { requireAuth } from "./auth/middleware";
 import { authRouter } from "./auth/auth-routes";
 import { getPool, checkAuditTrailImmutability } from "./db";
+import {
+  buildAllowedOrigins,
+  corsMiddleware,
+  helmetMiddleware,
+  authRateLimiter,
+  apiRateLimiter,
+} from "./hardening";
+
+// F-07: Boot guards — fail fast rather than run insecure.
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is required");
+}
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET is required");
+}
+
+// F-07: CSP/CORS allowlist — Railway app origin + local dev.
+// Set ALLOWED_ORIGINS as a comma-separated list in Railway env vars.
+// Boot fails in production if empty (no wildcard allowed).
+const ALLOWED_ORIGINS = buildAllowedOrigins(process.env.ALLOWED_ORIGINS);
+if (process.env.NODE_ENV === "production" && ALLOWED_ORIGINS.length === 0) {
+  throw new Error("ALLOWED_ORIGINS is required in production (F-07 CSP/CORS boot guard)");
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -19,6 +42,16 @@ const httpServer = createServer(app);
 // skips setting the Set-Cookie header on Secure cookies, so browsers never
 // receive the session cookie and every request after login returns 401.
 app.set("trust proxy", 1);
+
+// F-07: CORS — allowlist only; no wildcard.
+app.use(corsMiddleware(ALLOWED_ORIGINS));
+
+// F-07: Helmet — security headers + strict CSP.
+app.use(helmetMiddleware(ALLOWED_ORIGINS));
+
+// F-07: Rate limiting.
+app.use("/api/auth", authRateLimiter());
+app.use("/api", apiRateLimiter());
 
 declare module "http" {
   interface IncomingMessage {
@@ -45,7 +78,7 @@ app.use(
       tableName: "session",
       pruneSessionInterval: 24 * 60 * 60,
     }),
-    secret: process.env.SESSION_SECRET ?? "dev-secret-change-in-production",
+    secret: process.env.SESSION_SECRET as string,
     resave: false,
     saveUninitialized: false,
     rolling: true,
