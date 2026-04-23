@@ -12,8 +12,14 @@ import { AppError } from "./errors";
 //      read err.message; 500 default.
 //
 // See spec §2.2 for the structured error contract.
-export const errorMiddleware: ErrorRequestHandler = (err, _req, res, next) => {
+export const errorMiddleware: ErrorRequestHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
+
+  // F-07: Echo the request-id on every error response so clients can correlate
+  // with server logs. req.requestId is set by server/index.ts on every request.
+  if (req.requestId) {
+    res.setHeader("X-Request-Id", req.requestId);
+  }
 
   if (err instanceof AppError) {
     if (err.status >= 500) console.error("[error]", err.code, err.message, err);
