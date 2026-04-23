@@ -15,6 +15,7 @@ interface ValidationDocumentSummary {
   signatureId: string | null;
   createdAt: string;
   updatedAt: string;
+  signedBy: string | null;
 }
 
 async function fetchValidationDocuments(): Promise<ValidationDocumentSummary[]> {
@@ -66,11 +67,16 @@ export default function ValidationList() {
                 )}
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
-                {doc.status === "SIGNED"
-                  ? new Date(doc.updatedAt).toLocaleDateString("en-US", {
+                {doc.status === "SIGNED" ? (
+                  <span>
+                    {doc.signedBy ?? "—"} ·{" "}
+                    {new Date(doc.updatedAt).toLocaleDateString("en-US", {
                       year: "numeric", month: "short", day: "numeric",
-                    })
-                  : "—"}
+                    })}
+                  </span>
+                ) : (
+                  "—"
+                )}
               </TableCell>
             </TableRow>
           ))}

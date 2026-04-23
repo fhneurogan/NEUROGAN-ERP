@@ -14,7 +14,9 @@ import { performSignature, type SignatureContext } from "../signatures/signature
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ValidationDocumentSummary = Omit<SelectValidationDocument, "content">;
+export type ValidationDocumentSummary = Omit<SelectValidationDocument, "content"> & {
+  signedBy: string | null;
+};
 
 export type ValidationDocumentDetail = SelectValidationDocument & {
   signature: typeof schema.electronicSignatures.$inferSelect | null;
@@ -37,8 +39,13 @@ export async function listValidationDocuments(): Promise<ValidationDocumentSumma
       signatureId: schema.validationDocuments.signatureId,
       createdAt:   schema.validationDocuments.createdAt,
       updatedAt:   schema.validationDocuments.updatedAt,
+      signedBy:    schema.electronicSignatures.fullNameAtSigning,
     })
     .from(schema.validationDocuments)
+    .leftJoin(
+      schema.electronicSignatures,
+      eq(schema.validationDocuments.signatureId, schema.electronicSignatures.id),
+    )
     .orderBy(
       asc(schema.validationDocuments.module),
       asc(schema.validationDocuments.type),
