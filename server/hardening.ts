@@ -26,10 +26,14 @@ export function buildAllowedOrigins(rawEnv?: string): string[] {
 export function corsMiddleware(allowedOrigins: string[]): RequestHandler {
   return cors({
     origin: (origin, callback) => {
-      // No Origin header = same-origin request (SPA served from same host). Allow.
+      // No Origin header = same-origin navigation. Allow.
       if (!origin) return callback(null, true);
+      // Listed origin = explicitly allowed cross-origin caller.
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`CORS: origin ${origin} not allowed`));
+      // Unlisted origin: omit CORS headers but don't error — the request still
+      // reaches the handler. Browsers will block the response for true
+      // cross-origin callers; same-origin SPA calls don't need CORS headers.
+      return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

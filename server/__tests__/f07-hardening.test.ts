@@ -60,12 +60,13 @@ describe("CORS middleware", () => {
     expect(res.headers["access-control-allow-origin"]).toBe("https://app.example.com");
   });
 
-  it("rejects an unlisted origin with 500 (cors default for blocked origins)", async () => {
+  it("allows unlisted origin through but sends no CORS headers", async () => {
     const res = await request(buildApp())
       .get("/api/health")
       .set("Origin", "https://evil.com");
-    // cors() calls next(err) for blocked origins; without error handler Express returns 500
-    expect(res.status).toBe(500);
+    // Request proceeds (no 500) but browser can't read the response cross-origin
+    // because access-control-allow-origin is absent.
+    expect(res.status).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
