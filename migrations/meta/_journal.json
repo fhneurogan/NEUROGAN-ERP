@@ -36,6 +36,20 @@
       "when": 1745452800000,
       "tag": "0004_f04_electronic_signatures",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776988800000,
+      "tag": "0005_f10_validation_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776992400000,
+      "tag": "0006_f10_fix_signature_fk",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@ import { seedSuppliers } from "./fixtures/suppliers";
 import { seedProducts }  from "./fixtures/products";
 import { seedLots }      from "./fixtures/lots";
 import { seedRecipes }   from "./fixtures/recipes";
+import { seedValidationDocuments } from "./fixtures/validationDocuments";
 
 let seeded = false;
 
@@ -36,4 +37,5 @@ export async function seed(): Promise<void> {
   await seedProducts();
   await seedLots();      // depends on products, suppliers, locations
   await seedRecipes();   // depends on products
+  await seedValidationDocuments();
 }

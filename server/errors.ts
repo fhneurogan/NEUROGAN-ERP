@@ -28,7 +28,8 @@ export type ErrorCode =
   | "TRAINING_EXPIRED"
   | "DISQUALIFIED_LAB"
   | "NOT_ON_APPROVED_REGISTRY"
-  | "IDENTITY_SAME";
+  | "IDENTITY_SAME"
+  | "ALREADY_SIGNED";
 
 export class AppError extends Error {
   readonly code: ErrorCode;
@@ -101,4 +102,7 @@ export const errors = {
       423,
       { entityType, currentStatus },
     ),
+
+  alreadySigned: () =>
+    new AppError("ALREADY_SIGNED", "Document is already signed", 409),
 };

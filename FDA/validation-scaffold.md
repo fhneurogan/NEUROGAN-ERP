@@ -83,6 +83,7 @@ Populate one table row per URS item. Copy the template when adding.
 | URS-R-06-01-01 | Returned product shall default to quarantine and cannot re-stock without a signed disposition. | §111.503, §111.510, Obs 12 | DRAFT |
 | URS-R-06-02-01 | A return disposition shall require a Part 11 e-signature carrying meaning `RETURN_DISPOSITION`. | §111.510, Obs 12 | DRAFT |
 | URS-R-06-03-01 | Returns for a single lot exceeding threshold shall automatically open a batch investigation and HOLD the lot. | §111.553 | DRAFT |
+| URS-F-10-01 | Platform validation documents shall be signed within the ERP using Part 11-compliant electronic signatures. | GAMP 5 Cat 5, Part 11 §11.50 | IMPLEMENTED (F-10) |
 
 Statuses: DRAFT → REVIEWED → APPROVED (signature in §9). New URS items are added by the owning ticket's PR.
 
@@ -108,6 +109,7 @@ FRS items describe *what the software does* to meet a URS. One FRS may serve mul
 | FRS-F-04-01 | Shared `<SignatureCeremony>` dialog requires password re-entry + meaning code before submitting a signing action. | URS-F-04-01, 04-02, 04-03 | DRAFT |
 | FRS-F-05-01 | `transition(entity, action, context)` validates `from → to` + role + signature; throws `ILLEGAL_TRANSITION`, `FORBIDDEN`, or `SIGNATURE_REQUIRED`. | URS-F-05-01, 05-02 | DRAFT |
 | FRS-F-06-01 | `rejectIdentityInBody` middleware returns 400 if the request body contains any of `reviewedBy`, `performedBy`, `verifiedBy`, `weighedBy`, `addedBy`, `qcReviewedBy`, `approvedBy`. | URS-F-06-01 | DRAFT |
+| FRS-F-10-01 | `POST /api/validation-documents/:id/sign` runs the F-04 signature ceremony and transitions the document to SIGNED; content is frozen. GET endpoints return the document list and full content for QA/ADMIN roles. | URS-F-10-01 | IMPLEMENTED (F-10) |
 
 (Add one row per ticket on merge.)
 
@@ -131,6 +133,17 @@ DS items describe *how the software is implemented*. Types, tables, columns, mid
 | DS-F-03-01 | `erp_audit_trail` table owned by schema owner; `INSERT`-only grant to app role; `CHECK (occurred_at <= now() + '1 minute')`. | FRS-F-03-01 | DRAFT |
 | DS-F-04-01 | `erp_electronic_signatures` table with `fullNameAtSigning`, `titleAtSigning` snapshots; signature creation always in same transaction as the state change. | FRS-F-04-01 | DRAFT |
 | DS-F-05-01 | `server/state/transitions.ts` defines a `Transition<T>[]` per entity; `transition()` looks up the row, validates, and returns the new state. | FRS-F-05-01 | DRAFT |
+| DS-F-10-01 | `erp_validation_documents` table: `docId` unique slug, `content` markdown, `status` DRAFT/SIGNED, `signatureId` FK to `erp_electronic_signatures`. Sign action calls `performSignature` (F-04) inside a transaction; content is frozen on SIGNED. Seeded by `scripts/seed-validation.ts` for production and `server/seed/test/fixtures/validationDocuments.ts` for tests. | FRS-F-10-01 | IMPLEMENTED (F-10) |
+
+---
+
+## 4a. OQ Test Cases — index
+
+One row per OQ test case. Referenced by the traceability matrix in §7.
+
+| ID | Test scenario | Satisfies DS | Result |
+|---|---|---|---|
+| OQ-F-10-01 | Sign a document, verify status SIGNED + sig row in DB; wrong password stays DRAFT; PRODUCTION role gets 403; re-sign returns 409. | DS-F-10-01 | PASS |
 
 ---
 
@@ -223,6 +236,7 @@ One row per URS. Fill as tickets close. Row is complete when all five columns re
 | URS-R-06-01-01 | — | — | OQ-R-06-01-01 | Obs 12 |
 | URS-R-06-02-01 | — | — | OQ-R-06-02-01 | Obs 12 |
 | URS-R-06-03-01 | — | — | OQ-R-06-03-01 | Obs 12 |
+| URS-F-10-01 | FRS-F-10-01 | DS-F-10-01 | OQ-F-10-01 | — |
 
 ---
 
