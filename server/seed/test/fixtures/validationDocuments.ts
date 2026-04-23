@@ -8,7 +8,7 @@ const IQ_CONTENT = `# Installation Qualification — Platform (IQ-PLATFORM)
 **Version:** 1.0
 **Date:** 2026-04-23
 **Engineering Owner:** Frederik Hejlskov
-**QA Signatory:** Carrie Treat, QC / PCQI
+**QA Signatory:** Steven Burgueno, QC Manager
 
 ## 1. Scope
 
@@ -77,7 +77,7 @@ const OQ_CONTENT = `# Operational Qualification — Platform (OQ-PLATFORM)
 **Version:** 1.0
 **Date:** 2026-04-23
 **Engineering Owner:** Frederik Hejlskov
-**QA Signatory:** Carrie Treat, QC / PCQI
+**QA Signatory:** Steven Burgueno, QC Manager
 
 ## 1. Scope
 
@@ -168,7 +168,7 @@ const PQ_CONTENT = `# Performance Qualification — Platform (PQ-PLATFORM)
 **Version:** 1.0
 **Date:** 2026-04-23
 **Engineering Owner:** Frederik Hejlskov
-**QA Signatory:** Carrie Treat, QC / PCQI
+**QA Signatory:** Steven Burgueno, QC Manager
 
 ## 1. Scope
 
@@ -183,7 +183,7 @@ Demonstrate that the platform performs its intended regulated functions under re
 
 ## 3. Shadow-run procedure
 
-Each day Carrie Treat performs the listed tasks in the staging environment and records the outcome.
+Each day Steven Burgueno performs the listed tasks in the staging environment and records the outcome.
 
 | Day | Task | Pass/Fail | Notes |
 |---|---|---|---|
@@ -209,7 +209,7 @@ PQ is PASSED when all 10 tasks above are PASS and the deviation log has zero unr
 
 **Disposition:** PASS / FAIL / PASS WITH DEVIATION
 
-Executed by: Carrie Treat, QC / PCQI — date: ___________`;
+Executed by: Steven Burgueno, QC Manager — date: ___________`;
 
 const VSR_CONTENT = `# Validation Summary Report — Platform (VSR-PLATFORM)
 
@@ -217,7 +217,7 @@ const VSR_CONTENT = `# Validation Summary Report — Platform (VSR-PLATFORM)
 **Version:** 1.0
 **Date:** pending signature
 **Engineering Owner:** Frederik Hejlskov
-**QA Signatory:** Carrie Treat, QC / PCQI
+**QA Signatory:** Steven Burgueno, QC Manager
 
 ## 1. System description
 
@@ -258,14 +258,14 @@ All 8 platform URS items (URS-F-01-01 through URS-F-08-01) are covered by FRS an
 | User | Role | Training completed | Date |
 |---|---|---|---|
 | Frederik Hejlskov | ADMIN | System builder | 2026-04-23 |
-| Carrie Treat | QA / ADMIN | PQ shadow run + system walkthrough | record at execution |
+| Steven Burgueno | QA | PQ shadow run + system walkthrough | record at execution |
 
 ## 8. Periodic review plan
 
-- Audit trail QA review: weekly (first 90 days), monthly thereafter - Carrie Treat
-- Role review: quarterly - Carrie Treat
+- Audit trail QA review: weekly (first 90 days), monthly thereafter - Steven Burgueno
+- Role review: quarterly - Steven Burgueno
 - DR restore test: monthly automated CI - Frederik Hejlskov
-- Full validation review: annual - Carrie Treat
+- Full validation review: annual - Steven Burgueno
 
 ## 9. Conclusion
 
