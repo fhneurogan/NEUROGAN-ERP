@@ -819,7 +819,11 @@ export const validationDocuments = pgTable("erp_validation_documents", {
   updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertValidationDocumentSchema = createInsertSchema(validationDocuments);
+export const insertValidationDocumentSchema = createInsertSchema(validationDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export const selectValidationDocumentSchema = createSelectSchema(validationDocuments);
 export type InsertValidationDocument = z.infer<typeof insertValidationDocumentSchema>;
 export type SelectValidationDocument = z.infer<typeof selectValidationDocumentSchema>;
