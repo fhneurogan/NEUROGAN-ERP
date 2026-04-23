@@ -76,7 +76,7 @@ export async function getValidationDocument(id: string): Promise<ValidationDocum
 //
 // Atomically signs a validation document:
 //   1. Fetches the document; throws 404 if missing
-//   2. Throws 409 (RECORD_LOCKED) if already SIGNED
+//   2. Throws 409 (ALREADY_SIGNED) if already SIGNED
 //   3. Calls performSignature — inside the transaction updates status to SIGNED
 //   4. After commit, locates the newly-inserted signature row by entityId and
 //      writes its id back into signatureId on the document
@@ -92,7 +92,7 @@ export async function signValidationDocument(
 
   // 2. Reject if already signed.
   if (existing.status === "SIGNED") {
-    throw errors.recordLocked("Validation document", existing.status);
+    throw errors.alreadySigned();
   }
 
   // 3. Perform the signature ceremony; update status inside the transaction.
