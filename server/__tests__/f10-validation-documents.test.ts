@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import type { Express } from "express";
 import request from "supertest";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { buildTestApp } from "./helpers/test-app";
 import { seedOnce } from "../seed/test";
@@ -217,6 +217,13 @@ describeIfDb("F-10 — Validation Documents", () => {
       expect(body).toHaveProperty("id");
       expect(body).toHaveProperty("meaning");
       expect(body).toHaveProperty("signedAt");
+    });
+
+    it("returns 403 for PRODUCTION role", async () => {
+      const res = await request(app)
+        .get(`/api/validation-documents/${DOC_ID}/signature`)
+        .set("x-test-user-id", PROD_USER_ID);
+      expect(res.status).toBe(403);
     });
   });
 });
