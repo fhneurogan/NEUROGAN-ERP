@@ -10,7 +10,7 @@ import {
   primaryKey,
   jsonb,
 } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 
@@ -798,3 +798,28 @@ export const insertSignatureSchema = createInsertSchema(electronicSignatures, {
   id: true,
   signedAt: true,
 });
+
+// F-10: Platform and module validation documents (IQ / OQ / PQ / VSR)
+export const validationDocumentStatusEnum = z.enum(["DRAFT", "SIGNED"]);
+export type ValidationDocumentStatus = z.infer<typeof validationDocumentStatusEnum>;
+
+export const validationDocumentTypeEnum = z.enum(["IQ", "OQ", "PQ", "VSR"]);
+export type ValidationDocumentType = z.infer<typeof validationDocumentTypeEnum>;
+
+export const validationDocuments = pgTable("erp_validation_documents", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  docId:       text("doc_id").notNull().unique(),
+  title:       text("title").notNull(),
+  type:        text("type").$type<ValidationDocumentType>().notNull(),
+  module:      text("module").notNull(),
+  content:     text("content").notNull(),
+  status:      text("status").$type<ValidationDocumentStatus>().notNull().default("DRAFT"),
+  signatureId: uuid("signature_id").references(() => electronicSignatures.id),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertValidationDocumentSchema = createInsertSchema(validationDocuments);
+export const selectValidationDocumentSchema = createSelectSchema(validationDocuments);
+export type InsertValidationDocument = z.infer<typeof insertValidationDocumentSchema>;
+export type SelectValidationDocument = z.infer<typeof selectValidationDocumentSchema>;
