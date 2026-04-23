@@ -1,4 +1,4 @@
-import { Switch, Route, Router, Link, useLocation } from "wouter";
+import { Switch, Route, Router, Link, useLocation, Redirect } from "wouter";
 import { useHashLocationWithParams } from "@/lib/useHashLocationWithParams";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -17,11 +17,25 @@ import Production from "@/pages/production";
 import Receiving from "@/pages/receiving";
 import CoaLibrary from "@/pages/coa-library";
 import Settings from "@/pages/settings";
+import SettingsUsers from "@/pages/settings-users";
+import AuditTrail from "@/pages/audit";
+import Profile from "@/pages/profile";
 import SupplyChain from "@/pages/supply-chain";
 import BatchPrint from "@/pages/batch-print";
 import SkuManager from "@/pages/sku-manager";
+import Login from "@/pages/login";
+import ValidationList from "@/pages/quality/ValidationList";
+import ValidationDetail from "@/pages/quality/ValidationDetail";
+import { useAuth } from "@/lib/auth";
+import { InactivityWarning } from "@/components/InactivityWarning";
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  requiredRoles?: string[];
+}
+
+const navItems: NavItem[] = [
   { href: "/", label: "Dashboard" },
   { href: "/inventory", label: "Inventory" },
   { href: "/supply-chain", label: "Supply Chain" },
@@ -29,6 +43,7 @@ const navItems = [
   { href: "/receiving", label: "Receiving" },
   { href: "/production", label: "Production" },
   { href: "/transactions", label: "Transactions" },
+  { href: "/quality", label: "Quality", requiredRoles: ["QA", "ADMIN"] },
 ];
 
 function ThemeToggle() {
@@ -47,6 +62,12 @@ function ThemeToggle() {
 
 function TopNav() {
   const [location] = useLocation();
+  const { user } = useAuth();
+  const canViewAudit = user?.roles?.some((r) => r === "ADMIN" || r === "QA") ?? false;
+  const userRoles: string[] = user?.roles ?? [];
+  const visibleNavItems = navItems.filter(
+    (item) => !item.requiredRoles || item.requiredRoles.some((r) => userRoles.includes(r)),
+  );
 
   return (
     <header className="shrink-0 border-b border-border bg-card">
@@ -60,6 +81,20 @@ function TopNav() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {canViewAudit && (
+            <Link href="/audit">
+              <button
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors hover:bg-muted ${
+                  location.startsWith("/audit")
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground"
+                }`}
+                data-testid="nav-audit"
+              >
+                <span>Audit Trail</span>
+              </button>
+            </Link>
+          )}
           <Link href="/settings">
             <button
               className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors hover:bg-muted ${
@@ -79,7 +114,7 @@ function TopNav() {
 
       {/* Navigation tabs */}
       <nav className="flex items-center gap-0 px-5" data-testid="nav-tabs">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive =
             item.href === "/"
               ? location === "/"
@@ -122,7 +157,14 @@ function AppLayout() {
           <Route path="/production" component={Production} />
           <Route path="/transactions" component={Transactions} />
           <Route path="/sku-manager" component={SkuManager} />
+          <Route path="/audit" component={AuditTrail} />
+          <Route path="/quality/validation/:id" component={ValidationDetail} />
+          <Route path="/quality/validation" component={ValidationList} />
+          <Route path="/quality" component={ValidationList} />
+          <Route path="/settings/users" component={SettingsUsers} />
           <Route path="/settings" component={Settings} />
+          <Route path="/profile/rotate-password" component={Profile} />
+          <Route path="/profile" component={Profile} />
           <Route component={NotFound} />
         </Switch>
       </main>
@@ -131,6 +173,26 @@ function AppLayout() {
       </footer>
     </div>
   );
+}
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, mustRotatePassword } = useAuth();
+  const [location] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return <Redirect to="/login" />;
+  if (mustRotatePassword && location !== "/profile/rotate-password") {
+    return <Redirect to="/profile/rotate-password" />;
+  }
+
+  return <>{children}</>;
 }
 
 function App() {
@@ -142,15 +204,24 @@ function App() {
           <Router hook={useHashLocationWithParams}>
             <Switch>
               <Route path="/production/print/:id" component={BatchPrint} />
+              <Route path="/login" component={Login} />
               <Route>
-                <AppLayout />
+                <AuthGate>
+                  <AppLayout />
+                </AuthGate>
               </Route>
             </Switch>
+            <AuthGateInactivity />
           </Router>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );
+}
+
+function AuthGateInactivity() {
+  const { isAuthenticated } = useAuth();
+  return <InactivityWarning isAuthenticated={isAuthenticated} />;
 }
 
 export default App;

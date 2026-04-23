@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,7 +64,6 @@ import {
   ShoppingBag,
   ShoppingCart,
   FlaskConical,
-  Check,
 } from "lucide-react";
 import { formatQty } from "@/lib/formatQty";
 import { formatDate } from "@/lib/formatDate";
@@ -79,6 +78,7 @@ import type {
   ProductCategory,
   RecipeWithDetails,
   Location,
+  Lot,
 } from "@shared/schema";
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -780,7 +780,7 @@ function CreateMaterialDialog({
       });
       const product = await res.json();
       // Create lot if lotNumber is provided
-      let lot: any = null;
+      let lot: Lot | null = null;
       if (lotNumber.trim()) {
         const lotRes = await apiRequest("POST", "/api/lots", {
           productId: product.id,

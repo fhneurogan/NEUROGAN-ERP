@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -8,15 +7,6 @@ import type {
   ProductionBatchWithDetails,
   RecipeWithDetails,
 } from "@shared/schema";
-
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "—";
-  const d = new Date(dateStr + "T00:00:00");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${mm}-${dd}-${yyyy}`;
-}
 
 function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
@@ -31,7 +21,6 @@ function formatPerUnit(total: number, units: number): string {
 export default function BatchPrint() {
   const [, params] = useRoute("/production/print/:id");
   const batchId = params?.id;
-  const hasPrinted = useRef(false);
 
   const {
     data: batch,
@@ -60,7 +49,6 @@ export default function BatchPrint() {
 
   const recipe = recipes && recipes.length > 0 ? recipes[0] : null;
   const isLoading = batchLoading || recipesLoading;
-  const dataReady = !!batch && !batchLoading && !recipesLoading;
 
   const triggerPrint = () => {
     // Clone the print content and open in a new window to bypass iframe restrictions

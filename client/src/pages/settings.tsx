@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch as SwitchUI } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -47,7 +47,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
-import { Save, Building2, AlertTriangle, Hash, Tag, Plus, Pencil, Trash2, Package } from "lucide-react";
+import { Save, Building2, Hash, Tag, Plus, Pencil, Trash2 } from "lucide-react";
 import type { Location } from "@shared/schema";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -582,6 +582,7 @@ function LocationsContent() {
 // ═══════════════════════════════════════════════════════════
 
 const LazySkuManager = lazy(() => import("@/pages/sku-manager"));
+const LazySettingsUsers = lazy(() => import("@/pages/settings-users"));
 
 function SkuManagerEmbed() {
   return (
@@ -591,10 +592,20 @@ function SkuManagerEmbed() {
   );
 }
 
-type SettingsTab = "settings" | "locations" | "sku-manager";
+function UsersEmbed() {
+  return (
+    <Suspense fallback={<div className="p-6"><Skeleton className="h-96 w-full" /></div>}>
+      <LazySettingsUsers />
+    </Suspense>
+  );
+}
+
+type SettingsTab = "settings" | "locations" | "sku-manager" | "users";
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
+  const { user } = useAuth();
+  const isAdmin = user?.roles?.includes("ADMIN") ?? false;
 
   return (
     <div className="flex flex-col h-full">
@@ -639,6 +650,19 @@ export default function Settings() {
           >
             SKU Manager
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab("users")}
+              data-testid="tab-users"
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+                activeTab === "users"
+                  ? "bg-background text-foreground border-border"
+                  : "bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              Users
+            </button>
+          )}
         </div>
       </div>
 
@@ -647,6 +671,7 @@ export default function Settings() {
         {activeTab === "settings" && <SettingsContent />}
         {activeTab === "locations" && <LocationsContent />}
         {activeTab === "sku-manager" && <SkuManagerEmbed />}
+        {activeTab === "users" && isAdmin && <UsersEmbed />}
       </div>
     </div>
   );

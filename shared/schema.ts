@@ -1,5 +1,16 @@
-import { pgTable, text, varchar, decimal, timestamp, pgEnum } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import {
+  pgTable,
+  text,
+  varchar,
+  decimal,
+  timestamp,
+  pgEnum,
+  uuid,
+  integer,
+  primaryKey,
+  jsonb,
+} from "drizzle-orm/pg-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 
@@ -8,8 +19,20 @@ export const categoryEnum = pgEnum("category", ["ACTIVE_INGREDIENT", "SUPPORTING
 export const statusEnum = pgEnum("status", ["ACTIVE", "DISCONTINUED"]);
 export const uomEnum = pgEnum("uom", ["g", "mg", "L", "mL", "gal", "pcs", "lb", "oz"]);
 export const transactionTypeEnum = pgEnum("transaction_type", ["PO_RECEIPT", "PRODUCTION_CONSUMPTION", "PRODUCTION_OUTPUT", "COUNT_ADJUSTMENT"]);
-export const userRoleEnum = pgEnum("user_role", ["ADMIN", "OPERATOR"]);
 export const poStatusEnum = pgEnum("po_status", ["DRAFT", "SUBMITTED", "PARTIALLY_RECEIVED", "CLOSED", "CANCELLED"]);
+
+// F-01: user role + user status as text + Zod unions.
+//
+// Per AGENTS.md §5.2, enums are declared as text columns + a Zod union rather
+// than pgEnum, so values can evolve without requiring a DROP TYPE + CREATE TYPE
+// migration dance. The old pgEnum('user_role', ['ADMIN','OPERATOR']) from the
+// Perplexity-built scaffold (see 0000_baseline.sql) is dropped by the F-01
+// migration; nothing in the codebase referenced it.
+export const userRoleEnum = z.enum(["ADMIN", "QA", "PRODUCTION", "RECEIVING", "VIEWER"]);
+export type UserRole = z.infer<typeof userRoleEnum>;
+
+export const userStatusEnum = z.enum(["ACTIVE", "DISABLED"]);
+export type UserStatus = z.infer<typeof userStatusEnum>;
 
 // Products
 export const products = pgTable("erp_products", {
@@ -596,3 +619,211 @@ export type DashboardSupplyChain = {
   topBottleneckMaterials: BottleneckMaterial[];
   lowestCapacityProducts: LowestCapacityProduct[];
 };
+
+// ─── F-01: users + user_roles ────────────────────────────────
+//
+// Required by every downstream regulated ticket. See FDA/neurogan-erp-build-spec.md
+// §4.1 for the full data model and §4.3's DoD; authentication (F-02), audit
+// trail (F-03), and signature ceremony (F-04) all depend on these tables being
+// the sole identity source. Admin deletion is disabled at the app level —
+// users are set to status = 'DISABLED', never DELETE-d, per AGENTS.md §4.4 and
+// 21 CFR §111.180 retention.
+
+export const users = pgTable("erp_users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  fullName: text("full_name").notNull(),
+  title: text("title"),
+  passwordHash: text("password_hash").notNull(),
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }).notNull().defaultNow(),
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  status: text("status").$type<UserStatus>().notNull().default("ACTIVE"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByUserId: uuid("created_by_user_id"),
+});
+
+export const userRoles = pgTable(
+  "erp_user_roles",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    role: text("role").$type<UserRole>().notNull(),
+    grantedByUserId: uuid("granted_by_user_id")
+      .notNull()
+      .references(() => users.id),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.role] }),
+  }),
+);
+
+// Regulated-safe insert schemas. passwordHash is server-generated; callers
+// never set it. status defaults to ACTIVE. createdByUserId comes from
+// req.user.id (enforced in F-02's rejectIdentityInBody).
+export const insertUserSchema = createInsertSchema(users, {
+  email: z.string().email().trim().toLowerCase(),
+  fullName: z.string().min(1).trim(),
+  title: z.string().trim().nullish(),
+  status: userStatusEnum.default("ACTIVE"),
+}).omit({
+  id: true,
+  passwordHash: true,
+  passwordChangedAt: true,
+  failedLoginCount: true,
+  lockedUntil: true,
+  createdAt: true,
+});
+
+export const insertUserRoleSchema = createInsertSchema(userRoles, {
+  role: userRoleEnum,
+}).omit({
+  grantedAt: true,
+});
+
+// Public-facing user response — never includes passwordHash.
+// failedLoginCount + lockedUntil are filtered at the route layer for
+// non-ADMIN viewers (see server/routes.ts).
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UserRoleRow = typeof userRoles.$inferSelect;
+export type InsertUserRole = z.infer<typeof insertUserRoleSchema>;
+
+// Shape returned by GET /api/users — flat list of roles, no passwordHash.
+export type UserResponse = Omit<User, "passwordHash"> & {
+  roles: UserRole[];
+};
+
+// Password history — last N hashes per user for reuse checking (D-02).
+export const passwordHistory = pgTable("erp_password_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PasswordHistoryRow = typeof passwordHistory.$inferSelect;
+
+// ─── Audit trail (F-03) ────────────────────────────────────────────────────
+//
+// Append-only record of every regulated write. The database role that the
+// application uses is granted INSERT only — UPDATE and DELETE are revoked
+// (see migration 0003 and server/db.ts boot check). Part 11 §11.10(e).
+
+export const auditActionEnum = z.enum([
+  "CREATE",
+  "UPDATE",
+  "DELETE_BLOCKED",
+  "TRANSITION",
+  "SIGN",
+  "LOGIN",
+  "LOGIN_FAILED",
+  "LOGOUT",
+  "ROLE_GRANT",
+  "ROLE_REVOKE",
+  "PASSWORD_ROTATE",
+]);
+export type AuditAction = z.infer<typeof auditActionEnum>;
+
+export const auditTrail = pgTable("erp_audit_trail", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  action: text("action").$type<AuditAction>().notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id"),
+  before: jsonb("before"),
+  after: jsonb("after"),
+  route: text("route"),
+  requestId: text("request_id"),
+  meta: jsonb("meta"),
+});
+
+export type AuditRow = typeof auditTrail.$inferSelect;
+
+export const insertAuditSchema = createInsertSchema(auditTrail, {
+  action: auditActionEnum,
+}).omit({
+  id: true,
+  occurredAt: true,
+});
+
+// ─── Electronic signatures (F-04) ─────────────────────────────────────────
+//
+// Part 11 §11.50 / §11.70 / §11.100 / §11.200 / §11.300.
+// Each regulated state transition must be accompanied by an e-signature that
+// captures the signer's identity snapshot, meaning, and a printable
+// manifestation — all in the same DB transaction as the state change.
+
+export const signatureMeaningEnum = z.enum([
+  "AUTHORED",
+  "REVIEWED",
+  "APPROVED",
+  "REJECTED",
+  "QC_DISPOSITION",
+  "QA_RELEASE",
+  "DEVIATION_DISPOSITION",
+  "RETURN_DISPOSITION",
+  "COMPLAINT_REVIEW",
+  "SAER_SUBMIT",
+  "MMR_APPROVAL",
+  "SPEC_APPROVAL",
+  "LAB_APPROVAL",
+]);
+export type SignatureMeaning = z.infer<typeof signatureMeaningEnum>;
+
+export const electronicSignatures = pgTable("erp_electronic_signatures", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  meaning: text("meaning").$type<SignatureMeaning>().notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  commentary: text("commentary"),
+  fullNameAtSigning: text("full_name_at_signing").notNull(),
+  titleAtSigning: text("title_at_signing"),
+  requestId: text("request_id").notNull(),
+  manifestationJson: jsonb("manifestation_json").notNull(),
+});
+
+export type SignatureRow = typeof electronicSignatures.$inferSelect;
+
+export const insertSignatureSchema = createInsertSchema(electronicSignatures, {
+  meaning: signatureMeaningEnum,
+}).omit({
+  id: true,
+  signedAt: true,
+});
+
+// F-10: Platform and module validation documents (IQ / OQ / PQ / VSR)
+export const validationDocumentStatusEnum = z.enum(["DRAFT", "SIGNED"]);
+export type ValidationDocumentStatus = z.infer<typeof validationDocumentStatusEnum>;
+
+export const validationDocumentTypeEnum = z.enum(["IQ", "OQ", "PQ", "VSR"]);
+export type ValidationDocumentType = z.infer<typeof validationDocumentTypeEnum>;
+
+export const validationDocuments = pgTable("erp_validation_documents", {
+  id:          uuid("id").primaryKey().defaultRandom(),
+  docId:       text("doc_id").notNull().unique(),
+  title:       text("title").notNull(),
+  type:        text("type").$type<ValidationDocumentType>().notNull(),
+  module:      text("module").notNull(),
+  content:     text("content").notNull(),
+  status:      text("status").$type<ValidationDocumentStatus>().notNull().default("DRAFT"),
+  signatureId: uuid("signature_id").references(() => electronicSignatures.id),
+  createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertValidationDocumentSchema = createInsertSchema(validationDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const selectValidationDocumentSchema = createSelectSchema(validationDocuments);
+export type InsertValidationDocument = z.infer<typeof insertValidationDocumentSchema>;
+export type SelectValidationDocument = z.infer<typeof selectValidationDocumentSchema>;

@@ -1,5 +1,5 @@
-import { eq, desc, asc, and, sql, gte, lte, inArray, ilike, ne } from "drizzle-orm";
-import { db } from "./db";
+import { eq, ne, desc, asc, and, sql, gte, lte, inArray, type SQL } from "drizzle-orm";
+import { db, type Tx } from "./db";
 import * as schema from "@shared/schema";
 import {
   type Product, type InsertProduct,
@@ -9,13 +9,13 @@ import {
   type InventoryGrouped,
   type Supplier, type InsertSupplier,
   type PurchaseOrder, type InsertPurchaseOrder,
-  type POLineItem, type InsertPOLineItem,
+  type InsertPOLineItem,
   type PurchaseOrderWithDetails, type POLineItemWithProduct,
   type ProductionBatch, type InsertProductionBatch,
-  type ProductionInput, type InsertProductionInput,
+  type InsertProductionInput,
   type ProductionBatchWithDetails, type ProductionInputWithDetails,
   type Recipe, type InsertRecipe,
-  type RecipeLine, type InsertRecipeLine,
+  type InsertRecipeLine,
   type RecipeWithDetails, type RecipeLineWithDetails,
   type AppSettings, type InsertAppSettings,
   type ProductCategory, type InsertProductCategory,
@@ -30,6 +30,7 @@ import {
   type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
+  type User, type UserResponse, type UserRole, type UserStatus,
 } from "@shared/schema";
 import type {
   IStorage,
@@ -42,8 +43,11 @@ import type {
   ActiveBatchDetail,
   OpenPODetail,
   LowStockItem,
-  InboundPO,
+  CreateUserInput,
+  AuditFilters,
 } from "./storage";
+import { computeRoleDelta } from "./storage/users";
+import { assertNotLocked, assertValidTransition } from "./state/transitions";
 
 export class DatabaseStorage implements IStorage {
 
@@ -91,13 +95,13 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(schema.lots).where(eq(schema.lots.productId, productId));
   }
 
-  async createLot(data: InsertLot): Promise<Lot> {
-    const [row] = await db.insert(schema.lots).values(data).returning();
+  async createLot(data: InsertLot, tx?: Tx): Promise<Lot> {
+    const [row] = await (tx ?? db).insert(schema.lots).values(data).returning();
     return row;
   }
 
-  async updateLot(id: string, data: Partial<InsertLot>): Promise<Lot | undefined> {
-    const [row] = await db.update(schema.lots).set(data).where(eq(schema.lots.id, id)).returning();
+  async updateLot(id: string, data: Partial<InsertLot>, tx?: Tx): Promise<Lot | undefined> {
+    const [row] = await (tx ?? db).update(schema.lots).set(data).where(eq(schema.lots.id, id)).returning();
     return row;
   }
 
@@ -130,7 +134,7 @@ export class DatabaseStorage implements IStorage {
   // ─── Transactions ────────────────────────────────────
 
   async getTransactions(filters?: TransactionFilters): Promise<TransactionWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
 
     if (filters?.lotId) {
       conditions.push(eq(schema.transactions.lotId, filters.lotId));
@@ -179,8 +183,8 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async createTransaction(data: InsertTransaction): Promise<Transaction> {
-    const [row] = await db.insert(schema.transactions).values(data).returning();
+  async createTransaction(data: InsertTransaction, tx?: Tx): Promise<Transaction> {
+    const [row] = await (tx ?? db).insert(schema.transactions).values(data).returning();
     return row;
   }
 
@@ -306,7 +310,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPurchaseOrders(filters?: { status?: string; supplierId?: string }): Promise<PurchaseOrderWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.purchaseOrders.status, filters.status));
     if (filters?.supplierId) conditions.push(eq(schema.purchaseOrders.supplierId, filters.supplierId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -400,11 +404,6 @@ export class DatabaseStorage implements IStorage {
     await db.update(schema.poLineItems).set({ quantityReceived: String(newReceived) }).where(eq(schema.poLineItems.id, lineItemId));
 
     // Auto-update PO status
-    const allLineItems = await db.select().from(schema.poLineItems).where(eq(schema.poLineItems.purchaseOrderId, po.id));
-    const allFullyReceived = allLineItems.every(
-      li => parseFloat(li.quantityReceived) >= parseFloat(li.quantityOrdered)
-    );
-    // Re-check after update
     const updatedLineItems = await db.select().from(schema.poLineItems).where(eq(schema.poLineItems.purchaseOrderId, po.id));
     const allFull = updatedLineItems.every(
       li => parseFloat(li.quantityReceived) >= parseFloat(li.quantityOrdered)
@@ -449,7 +448,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProductionBatches(filters?: { status?: string }): Promise<ProductionBatchWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.productionBatches.status, filters.status));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const batches = await db.select().from(schema.productionBatches).where(whereClause).orderBy(desc(schema.productionBatches.createdAt));
@@ -1001,7 +1000,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecipes(productId?: string): Promise<RecipeWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (productId) conditions.push(eq(schema.recipes.productId, productId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const rows = await db.select().from(schema.recipes).where(whereClause);
@@ -1380,7 +1379,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReceivingRecords(filters?: { status?: string }): Promise<ReceivingRecordWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.receivingRecords.status, filters.status));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const records = await db.select().from(schema.receivingRecords).where(whereClause).orderBy(desc(schema.receivingRecords.createdAt));
@@ -1393,40 +1392,48 @@ export class DatabaseStorage implements IStorage {
     return this.enrichReceivingRecord(r);
   }
 
-  async createReceivingRecord(data: InsertReceivingRecord): Promise<ReceivingRecord> {
-    const [record] = await db.insert(schema.receivingRecords).values(data).returning();
-
-    // Update the lot's quarantine status
-    if (data.status) {
-      await db.update(schema.lots).set({ quarantineStatus: data.status }).where(eq(schema.lots.id, data.lotId));
-    }
-
-    return record;
+  async createReceivingRecord(data: InsertReceivingRecord, outerTx?: Tx): Promise<ReceivingRecord> {
+    const run = async (tx: Tx) => {
+      const [record] = await tx.insert(schema.receivingRecords).values(data).returning();
+      if (data.status) {
+        await tx.update(schema.lots).set({ quarantineStatus: data.status }).where(eq(schema.lots.id, data.lotId));
+      }
+      return record;
+    };
+    return outerTx ? run(outerTx) : db.transaction(run);
   }
 
-  async updateReceivingRecord(id: string, data: Partial<InsertReceivingRecord>): Promise<ReceivingRecord | undefined> {
-    const [row] = await db.update(schema.receivingRecords).set({ ...data, updatedAt: new Date() }).where(eq(schema.receivingRecords.id, id)).returning();
+  async updateReceivingRecord(id: string, data: Partial<InsertReceivingRecord>, tx?: Tx): Promise<ReceivingRecord | undefined> {
+    const [row] = await (tx ?? db).update(schema.receivingRecords).set({ ...data, updatedAt: new Date() }).where(eq(schema.receivingRecords.id, id)).returning();
     return row;
   }
 
-  async qcReviewReceivingRecord(id: string, disposition: string, reviewedBy: string, notes?: string): Promise<ReceivingRecord | undefined> {
-    const [existing] = await db.select().from(schema.receivingRecords).where(eq(schema.receivingRecords.id, id));
-    if (!existing) return undefined;
+  async qcReviewReceivingRecord(id: string, disposition: string, reviewedByUserId: string, notes?: string, outerTx?: Tx): Promise<ReceivingRecord | undefined> {
+    const run = async (tx: Tx) => {
+      const [existing] = await tx.select().from(schema.receivingRecords).where(eq(schema.receivingRecords.id, id));
+      if (!existing) return undefined;
 
-    const newStatus = disposition === "APPROVED" || disposition === "APPROVED_WITH_CONDITIONS" ? "APPROVED" : "REJECTED";
-    const [updated] = await db.update(schema.receivingRecords).set({
-      status: newStatus,
-      qcDisposition: disposition,
-      qcReviewedBy: reviewedBy,
-      qcReviewedAt: new Date(),
-      qcNotes: notes ?? existing.qcNotes,
-      updatedAt: new Date(),
-    }).where(eq(schema.receivingRecords.id, id)).returning();
+      assertNotLocked("receiving_record", existing.status);
 
-    // Update the lot's quarantine status
-    await db.update(schema.lots).set({ quarantineStatus: newStatus }).where(eq(schema.lots.id, existing.lotId));
+      const reviewer = await tx.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, reviewedByUserId));
+      const reviewerName = reviewer[0]?.fullName ?? reviewedByUserId;
 
-    return updated;
+      const newStatus = disposition === "APPROVED" || disposition === "APPROVED_WITH_CONDITIONS" ? "APPROVED" : "REJECTED";
+      assertValidTransition("receiving_record", existing.status, newStatus);
+      const [updated] = await tx.update(schema.receivingRecords).set({
+        status: newStatus,
+        qcDisposition: disposition,
+        qcReviewedBy: reviewerName,
+        qcReviewedAt: new Date(),
+        qcNotes: notes ?? existing.qcNotes,
+        updatedAt: new Date(),
+      }).where(eq(schema.receivingRecords.id, id)).returning();
+
+      await tx.update(schema.lots).set({ quarantineStatus: newStatus }).where(eq(schema.lots.id, existing.lotId));
+
+      return updated;
+    };
+    return outerTx ? run(outerTx) : db.transaction(run);
   }
 
   async getNextReceivingIdentifier(): Promise<string> {
@@ -1458,7 +1465,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCoaDocuments(filters?: { lotId?: string; productionBatchId?: string; sourceType?: string; overallResult?: string }): Promise<CoaDocumentWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.lotId) conditions.push(eq(schema.coaDocuments.lotId, filters.lotId));
     if (filters?.productionBatchId) conditions.push(eq(schema.coaDocuments.productionBatchId, filters.productionBatchId));
     if (filters?.sourceType) conditions.push(eq(schema.coaDocuments.sourceType, filters.sourceType));
@@ -1474,27 +1481,34 @@ export class DatabaseStorage implements IStorage {
     return this.enrichCoaDocument(doc);
   }
 
-  async createCoaDocument(data: InsertCoaDocument): Promise<CoaDocument> {
-    const [row] = await db.insert(schema.coaDocuments).values(data).returning();
+  async createCoaDocument(data: InsertCoaDocument, tx?: Tx): Promise<CoaDocument> {
+    const [row] = await (tx ?? db).insert(schema.coaDocuments).values(data).returning();
     return row;
   }
 
-  async updateCoaDocument(id: string, data: Partial<InsertCoaDocument>): Promise<CoaDocument | undefined> {
-    const [row] = await db.update(schema.coaDocuments).set({ ...data, updatedAt: new Date() }).where(eq(schema.coaDocuments.id, id)).returning();
+  async updateCoaDocument(id: string, data: Partial<InsertCoaDocument>, tx?: Tx): Promise<CoaDocument | undefined> {
+    const [row] = await (tx ?? db).update(schema.coaDocuments).set({ ...data, updatedAt: new Date() }).where(eq(schema.coaDocuments.id, id)).returning();
     return row;
   }
 
-  async qcReviewCoa(id: string, accepted: boolean, reviewedBy: string, notes?: string): Promise<CoaDocument | undefined> {
-    const [existing] = await db.select().from(schema.coaDocuments).where(eq(schema.coaDocuments.id, id));
-    if (!existing) return undefined;
-    const [updated] = await db.update(schema.coaDocuments).set({
-      qcReviewedBy: reviewedBy,
-      qcReviewedAt: new Date(),
-      qcAccepted: accepted ? "true" : "false",
-      qcNotes: notes ?? existing.qcNotes,
-      updatedAt: new Date(),
-    }).where(eq(schema.coaDocuments.id, id)).returning();
-    return updated;
+  async qcReviewCoa(id: string, accepted: boolean, reviewedByUserId: string, notes?: string, outerTx?: Tx): Promise<CoaDocument | undefined> {
+    const run = async (tx: Tx) => {
+      const [existing] = await tx.select().from(schema.coaDocuments).where(eq(schema.coaDocuments.id, id));
+      if (!existing) return undefined;
+
+      const reviewer = await tx.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, reviewedByUserId));
+      const reviewerName = reviewer[0]?.fullName ?? reviewedByUserId;
+
+      const [updated] = await tx.update(schema.coaDocuments).set({
+        qcReviewedBy: reviewerName,
+        qcReviewedAt: new Date(),
+        qcAccepted: accepted ? "true" : "false",
+        qcNotes: notes ?? existing.qcNotes,
+        updatedAt: new Date(),
+      }).where(eq(schema.coaDocuments.id, id)).returning();
+      return updated;
+    };
+    return outerTx ? run(outerTx) : db.transaction(run);
   }
 
   async getCoasByLot(lotId: string): Promise<CoaDocumentWithDetails[]> {
@@ -1509,7 +1523,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (supplierId) conditions.push(eq(schema.supplierQualifications.supplierId, supplierId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const rows = await db.select().from(schema.supplierQualifications).where(whereClause).orderBy(desc(schema.supplierQualifications.createdAt));
@@ -1548,7 +1562,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBprs(filters?: { status?: string; productionBatchId?: string }): Promise<BprWithDetails[]> {
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (filters?.status) conditions.push(eq(schema.batchProductionRecords.status, filters.status));
     if (filters?.productionBatchId) conditions.push(eq(schema.batchProductionRecords.productionBatchId, filters.productionBatchId));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -1568,48 +1582,56 @@ export class DatabaseStorage implements IStorage {
     return this.enrichBpr(bpr);
   }
 
-  async createBpr(data: InsertBpr): Promise<BatchProductionRecord> {
-    const [row] = await db.insert(schema.batchProductionRecords).values(data).returning();
+  async createBpr(data: InsertBpr, tx?: Tx): Promise<BatchProductionRecord> {
+    const [row] = await (tx ?? db).insert(schema.batchProductionRecords).values(data).returning();
     return row;
   }
 
-  async updateBpr(id: string, data: Partial<InsertBpr>): Promise<BatchProductionRecord | undefined> {
-    const [existing] = await db.select().from(schema.batchProductionRecords).where(eq(schema.batchProductionRecords.id, id));
+  async updateBpr(id: string, data: Partial<InsertBpr>, tx?: Tx): Promise<BatchProductionRecord | undefined> {
+    const [existing] = await (tx ?? db).select().from(schema.batchProductionRecords).where(eq(schema.batchProductionRecords.id, id));
     if (!existing) return undefined;
+    assertNotLocked("batch_production_record", existing.status);
     if (existing.status !== "IN_PROGRESS") {
       throw new Error("BPR can only be updated while IN_PROGRESS");
     }
-    const [row] = await db.update(schema.batchProductionRecords).set({ ...data, updatedAt: new Date() }).where(eq(schema.batchProductionRecords.id, id)).returning();
+    const [row] = await (tx ?? db).update(schema.batchProductionRecords).set({ ...data, updatedAt: new Date() }).where(eq(schema.batchProductionRecords.id, id)).returning();
     return row;
   }
 
-  async submitBprForReview(id: string): Promise<BatchProductionRecord | undefined> {
-    const [existing] = await db.select().from(schema.batchProductionRecords).where(eq(schema.batchProductionRecords.id, id));
+  async submitBprForReview(id: string, tx?: Tx): Promise<BatchProductionRecord | undefined> {
+    const [existing] = await (tx ?? db).select().from(schema.batchProductionRecords).where(eq(schema.batchProductionRecords.id, id));
     if (!existing) return undefined;
-    if (existing.status !== "IN_PROGRESS") {
-      throw new Error("BPR can only be submitted for review while IN_PROGRESS");
-    }
-    const [row] = await db.update(schema.batchProductionRecords).set({ status: "PENDING_QC_REVIEW", updatedAt: new Date() }).where(eq(schema.batchProductionRecords.id, id)).returning();
+    assertNotLocked("batch_production_record", existing.status);
+    assertValidTransition("batch_production_record", existing.status, "PENDING_QC_REVIEW");
+    const [row] = await (tx ?? db).update(schema.batchProductionRecords).set({ status: "PENDING_QC_REVIEW", updatedAt: new Date() }).where(eq(schema.batchProductionRecords.id, id)).returning();
     return row;
   }
 
-  async qcReviewBpr(id: string, disposition: string, reviewedBy: string, notes?: string): Promise<BatchProductionRecord | undefined> {
-    const [existing] = await db.select().from(schema.batchProductionRecords).where(eq(schema.batchProductionRecords.id, id));
-    if (!existing) return undefined;
-    if (existing.status !== "PENDING_QC_REVIEW") {
-      throw new Error("BPR must be in PENDING_QC_REVIEW status for QC review");
-    }
-    const isApproved = disposition === "APPROVED_FOR_DISTRIBUTION" || disposition === "APPROVED";
-    const [row] = await db.update(schema.batchProductionRecords).set({
-      qcReviewedBy: reviewedBy,
-      qcReviewedAt: new Date(),
-      qcDisposition: disposition,
-      qcNotes: notes ?? existing.qcNotes,
-      status: isApproved ? "APPROVED" : "REJECTED",
-      completedAt: isApproved ? new Date() : existing.completedAt,
-      updatedAt: new Date(),
-    }).where(eq(schema.batchProductionRecords.id, id)).returning();
-    return row;
+  async qcReviewBpr(id: string, disposition: string, reviewedByUserId: string, notes?: string, outerTx?: Tx): Promise<BatchProductionRecord | undefined> {
+    const run = async (tx: Tx) => {
+      const [existing] = await tx.select().from(schema.batchProductionRecords).where(eq(schema.batchProductionRecords.id, id));
+      if (!existing) return undefined;
+
+      assertNotLocked("batch_production_record", existing.status);
+      const isApprovedDisposition = disposition === "APPROVED_FOR_DISTRIBUTION" || disposition === "APPROVED";
+      const newStatus = isApprovedDisposition ? "APPROVED" : "REJECTED";
+      assertValidTransition("batch_production_record", existing.status, newStatus);
+
+      const reviewer = await tx.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, reviewedByUserId));
+      const reviewerName = reviewer[0]?.fullName ?? reviewedByUserId;
+
+      const [row] = await tx.update(schema.batchProductionRecords).set({
+        qcReviewedBy: reviewerName,
+        qcReviewedAt: new Date(),
+        qcDisposition: disposition,
+        qcNotes: notes ?? existing.qcNotes,
+        status: newStatus,
+        completedAt: isApprovedDisposition ? new Date() : existing.completedAt,
+        updatedAt: new Date(),
+      }).where(eq(schema.batchProductionRecords.id, id)).returning();
+      return row;
+    };
+    return outerTx ? run(outerTx) : db.transaction(run);
   }
 
   // ─── BPR Steps ───────────────────────────────────────
@@ -1663,5 +1685,334 @@ export class DatabaseStorage implements IStorage {
     if (!bpr) throw new Error("BPR not found");
     const [row] = await db.insert(schema.bprDeviations).values({ ...data, bprId }).returning();
     return row;
+  }
+
+  // ─── Users & Roles (F-01) ──────────────────────────────────
+  //
+  // Identity helpers for the regulated system. Every read that returns a
+  // UserResponse strips passwordHash at the DB boundary — callers cannot
+  // accidentally leak the hash. getUserByEmail returns the full User
+  // (including passwordHash) and exists only for F-02's login flow.
+
+  private async fetchRolesByUserIds(userIds: string[]): Promise<Map<string, UserRole[]>> {
+    if (userIds.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.userRoles)
+      .where(inArray(schema.userRoles.userId, userIds));
+    const byUser = new Map<string, UserRole[]>();
+    for (const r of rows) {
+      const existing = byUser.get(r.userId);
+      if (existing) existing.push(r.role);
+      else byUser.set(r.userId, [r.role]);
+    }
+    return byUser;
+  }
+
+  private static toUserResponse(user: User, roles: readonly UserRole[]): UserResponse {
+    // Explicit destructure so passwordHash cannot be returned by accident.
+    const { passwordHash: _passwordHash, ...rest } = user;
+    void _passwordHash;
+    return { ...rest, roles: [...roles] };
+  }
+
+  async listUsers(): Promise<UserResponse[]> {
+    const rows = await db.select().from(schema.users).orderBy(asc(schema.users.fullName));
+    const rolesByUser = await this.fetchRolesByUserIds(rows.map((u) => u.id));
+    return rows.map((u) => DatabaseStorage.toUserResponse(u, rolesByUser.get(u.id) ?? []));
+  }
+
+  async getUserById(id: string): Promise<UserResponse | undefined> {
+    const [row] = await db.select().from(schema.users).where(eq(schema.users.id, id));
+    if (!row) return undefined;
+    const rolesByUser = await this.fetchRolesByUserIds([id]);
+    return DatabaseStorage.toUserResponse(row, rolesByUser.get(id) ?? []);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [row] = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, email.toLowerCase().trim()));
+    return row;
+  }
+
+  async createUser(data: CreateUserInput, outerTx?: Tx): Promise<UserResponse> {
+    // One transaction: insert user, insert role rows, return the user with
+    // roles attached. Duplicate email surfaces as a Postgres UNIQUE violation
+    // (error code 23505) which the route layer maps to errors.duplicateEmail.
+    // When outerTx is provided (by withAudit) we reuse it directly so the
+    // audit row and the data write share a single transaction.
+    const run = async (tx: Tx) => {
+      // Set passwordChangedAt to epoch so the 90-day rotation gate fires
+      // immediately — all new accounts start with a temp password (F-01
+      // generateTemporaryPassword) and must rotate on first login (F-02).
+      const [user] = await tx
+        .insert(schema.users)
+        .values({
+          email: data.email.toLowerCase().trim(),
+          fullName: data.fullName.trim(),
+          title: data.title ?? null,
+          passwordHash: data.passwordHash,
+          passwordChangedAt: new Date(0),
+          createdByUserId: data.createdByUserId,
+        })
+        .returning();
+
+      if (!user) throw new Error("createUser: insert returned no row");
+
+      if (data.roles.length > 0) {
+        // grantedByUserId falls back to the newly-created user only when
+        // bootstrapping the first ADMIN (no authenticated caller yet).
+        const grantedBy = data.grantedByUserId ?? user.id;
+        await tx.insert(schema.userRoles).values(
+          data.roles.map((role) => ({
+            userId: user.id,
+            role,
+            grantedByUserId: grantedBy,
+          })),
+        );
+      }
+
+      return DatabaseStorage.toUserResponse(user, data.roles);
+    };
+    return outerTx ? run(outerTx) : db.transaction(run);
+  }
+
+  async updateUserStatus(id: string, status: UserStatus, outerTx?: Tx): Promise<UserResponse | undefined> {
+    const runner = outerTx ?? db;
+    const [updated] = await runner
+      .update(schema.users)
+      .set({ status })
+      .where(eq(schema.users.id, id))
+      .returning();
+    if (!updated) return undefined;
+    const rolesByUser = await this.fetchRolesByUserIds([id]);
+    return DatabaseStorage.toUserResponse(updated, rolesByUser.get(id) ?? []);
+  }
+
+  async setUserRoles(
+    userId: string,
+    nextRoles: readonly UserRole[],
+    grantedByUserId: string,
+    outerTx?: Tx,
+  ): Promise<UserResponse | undefined> {
+    const run = async (tx: Tx) => {
+      const [user] = await tx.select().from(schema.users).where(eq(schema.users.id, userId));
+      if (!user) return undefined;
+
+      const currentRoleRows = await tx
+        .select()
+        .from(schema.userRoles)
+        .where(eq(schema.userRoles.userId, userId));
+      const currentRoles = currentRoleRows.map((r) => r.role);
+      const delta = computeRoleDelta(currentRoles, nextRoles);
+
+      for (const role of delta.remove) {
+        await tx
+          .delete(schema.userRoles)
+          .where(and(eq(schema.userRoles.userId, userId), eq(schema.userRoles.role, role)));
+      }
+
+      if (delta.add.length > 0) {
+        await tx.insert(schema.userRoles).values(
+          delta.add.map((role) => ({
+            userId,
+            role,
+            grantedByUserId,
+          })),
+        );
+      }
+
+      const finalRoles = [...new Set(nextRoles)].sort();
+      return DatabaseStorage.toUserResponse(user, finalRoles);
+    };
+    return outerTx ? run(outerTx) : db.transaction(run);
+  }
+
+  // ─── Auth helpers (F-02) ──────────────────────────────────
+
+  async recordFailedLogin(userId: string): Promise<{ lockedUntil: Date | null }> {
+    const LOCKOUT_THRESHOLD = 5;
+    const LOCKOUT_MINUTES = 30;
+
+    const [current] = await db
+      .select({ failedLoginCount: schema.users.failedLoginCount })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
+
+    if (!current) return { lockedUntil: null };
+
+    const newCount = current.failedLoginCount + 1;
+    const lockedUntil =
+      newCount >= LOCKOUT_THRESHOLD
+        ? new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000)
+        : null;
+
+    await db
+      .update(schema.users)
+      .set({ failedLoginCount: newCount, lockedUntil })
+      .where(eq(schema.users.id, userId));
+
+    return { lockedUntil };
+  }
+
+  async recordSuccessfulLogin(userId: string): Promise<void> {
+    await db
+      .update(schema.users)
+      .set({ failedLoginCount: 0, lockedUntil: null })
+      .where(eq(schema.users.id, userId));
+  }
+
+  async rotatePassword(userId: string, newHash: string, outerTx?: Tx): Promise<UserResponse | undefined> {
+    const run = async (tx: Tx) => {
+      const [current] = await tx
+        .select({ passwordHash: schema.users.passwordHash })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId));
+
+      if (!current) return undefined;
+
+      await tx.insert(schema.passwordHistory).values({
+        userId,
+        passwordHash: current.passwordHash,
+      });
+
+      const [updated] = await tx
+        .update(schema.users)
+        .set({
+          passwordHash: newHash,
+          passwordChangedAt: new Date(),
+          failedLoginCount: 0,
+          lockedUntil: null,
+        })
+        .where(eq(schema.users.id, userId))
+        .returning();
+
+      if (!updated) return undefined;
+      const roleMap = await this.fetchRolesByUserIds([userId]);
+      return DatabaseStorage.toUserResponse(updated, roleMap.get(userId) ?? []);
+    };
+    return outerTx ? run(outerTx) : db.transaction(run);
+  }
+
+  async getPasswordHistory(userId: string, limit: number): Promise<string[]> {
+    // Returns the most-recent `limit` history hashes (oldest entries in the
+    // history table) plus the user's CURRENT password hash — so callers can
+    // check all of them for reuse without needing a separate query.
+    const [current, historyRows] = await Promise.all([
+      db
+        .select({ passwordHash: schema.users.passwordHash })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId)),
+      db
+        .select({ passwordHash: schema.passwordHistory.passwordHash })
+        .from(schema.passwordHistory)
+        .where(eq(schema.passwordHistory.userId, userId))
+        .orderBy(desc(schema.passwordHistory.createdAt))
+        .limit(limit - 1),
+    ]);
+
+    const hashes: string[] = [];
+    if (current[0]) hashes.push(current[0].passwordHash);
+    for (const row of historyRows) hashes.push(row.passwordHash);
+    return hashes;
+  }
+
+  async isLastActiveAdmin(userId: string): Promise<boolean> {
+    // "Is this user an active ADMIN AND no other user is an active ADMIN?"
+    // Two subqueries; cheap enough at Release 1 scale. The cost of getting
+    // this wrong is being unable to log into the system, so we keep the
+    // query explicit and auditable.
+
+    // 1. Does this user currently hold ACTIVE + ADMIN?
+    const [subject] = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .innerJoin(schema.userRoles, eq(schema.users.id, schema.userRoles.userId))
+      .where(
+        and(
+          eq(schema.users.id, userId),
+          eq(schema.users.status, "ACTIVE"),
+          eq(schema.userRoles.role, "ADMIN"),
+        ),
+      );
+    if (!subject) return false;
+
+    // 2. Count OTHER ACTIVE admins. If zero, userId is the last.
+    const rows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.users)
+      .innerJoin(schema.userRoles, eq(schema.users.id, schema.userRoles.userId))
+      .where(
+        and(
+          ne(schema.users.id, userId),
+          eq(schema.users.status, "ACTIVE"),
+          eq(schema.userRoles.role, "ADMIN"),
+        ),
+      );
+    const otherActiveAdmins = rows[0]?.count ?? 0;
+    return otherActiveAdmins === 0;
+  }
+
+  // ─── Audit trail (F-03) ───────────────────────────────────
+
+  async listAuditRows(
+    filters: AuditFilters,
+    cursor?: string,
+    limit = 50,
+  ): Promise<{ rows: schema.AuditRow[]; nextCursor: string | null }> {
+    const PAGE = Math.min(limit, 200);
+    const conditions: SQL[] = [];
+
+    if (filters.entityType) conditions.push(eq(schema.auditTrail.entityType, filters.entityType));
+    if (filters.entityId) conditions.push(eq(schema.auditTrail.entityId, filters.entityId));
+    if (filters.userId) conditions.push(eq(schema.auditTrail.userId, filters.userId));
+    if (filters.action) conditions.push(eq(schema.auditTrail.action, filters.action as schema.AuditAction));
+    if (filters.from) conditions.push(gte(schema.auditTrail.occurredAt, filters.from));
+    if (filters.to) conditions.push(lte(schema.auditTrail.occurredAt, filters.to));
+
+    // Keyset pagination on (occurredAt DESC, id DESC)
+    if (cursor) {
+      const [tsStr, cursorId] = cursor.split("__");
+      if (tsStr && cursorId) {
+        const ts = new Date(tsStr);
+        conditions.push(
+          sql`(${schema.auditTrail.occurredAt}, ${schema.auditTrail.id}) < (${ts.toISOString()}::timestamptz, ${cursorId}::uuid)`,
+        );
+      }
+    }
+
+    const rows = await db
+      .select()
+      .from(schema.auditTrail)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(schema.auditTrail.occurredAt), desc(schema.auditTrail.id))
+      .limit(PAGE + 1);
+
+    const hasMore = rows.length > PAGE;
+    const page = hasMore ? rows.slice(0, PAGE) : rows;
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? `${last.occurredAt.toISOString()}__${last.id}`
+        : null;
+
+    return { rows: page, nextCursor };
+  }
+
+  // ─── Electronic signatures (F-04) ───────────────────────────────────────
+
+  async listSignatures(entityType: string, entityId: string): Promise<schema.SignatureRow[]> {
+    return db
+      .select()
+      .from(schema.electronicSignatures)
+      .where(
+        and(
+          eq(schema.electronicSignatures.entityType, entityType),
+          eq(schema.electronicSignatures.entityId, entityId),
+        ),
+      )
+      .orderBy(schema.electronicSignatures.signedAt);
   }
 }

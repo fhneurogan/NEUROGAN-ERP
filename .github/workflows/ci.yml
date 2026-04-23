@@ -1,0 +1,129 @@
+name: CI
+
+# CI jobs per AGENTS.md §3 and first-session.md §3:
+#   lint        — ESLint (--max-warnings 0) + prettier --check.
+#   typecheck   — tsc --noEmit.
+#   unit        — vitest run (shared/**, server/**, client/**, excl. server/__tests__).
+#   integration — vitest run --config vitest.integration.config.ts against a
+#                 disposable Postgres service.
+#   build       — client (vite) + server (esbuild) bundle succeeds.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - FDA-EQMS-feature-package
+  push:
+    branches:
+      - main
+      - FDA-EQMS-feature-package
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "10.33.0"
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      # Prettier is installed and runnable via 'pnpm format' / 'pnpm format:check'
+      # but not enforced in CI yet — the codebase has ~87 files with whitespace
+      # drift from the default .prettierrc. A follow-up ticket will do the
+      # bulk 'prettier --write' pass in its own focused PR and add format:check
+      # to this step at that time.
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  integration:
+    name: integration tests
+    runs-on: ubuntu-latest
+
+    # Disposable Postgres per run, per AGENTS.md §5.6.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: neurogan_erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://test:test@localhost:5432/neurogan_erp_test
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Apply drizzle migrations to the disposable Postgres before tests run.
+      # CI starts with an empty DB each time; 0000_baseline + 0001+ apply
+      # cleanly in sequence. On Railway staging/prod the baseline is marked
+      # 'already applied' by a one-time ops step (see F-01 PR description).
+      - run: pnpm migrate:up
+      - run: pnpm test:integration
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build

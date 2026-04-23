@@ -1,10 +1,58 @@
-import express, { type Request, Response, NextFunction } from "express";
+import express from "express";
+import session from "express-session";
+import ConnectPgSimple from "connect-pg-simple";
+import { randomUUID } from "crypto";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { errorMiddleware } from "./error-middleware";
+import { passport } from "./auth/passport";
+import { requireAuth } from "./auth/middleware";
+import { authRouter } from "./auth/auth-routes";
+import { getPool, checkAuditTrailImmutability } from "./db";
+import {
+  buildAllowedOrigins,
+  corsMiddleware,
+  helmetMiddleware,
+  authRateLimiter,
+  apiRateLimiter,
+} from "./hardening";
+
+// F-07: Boot guards — fail fast rather than run insecure.
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is required");
+}
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET is required");
+}
+
+// F-07: CSP/CORS allowlist — Railway app origin + local dev.
+// Set ALLOWED_ORIGINS as a comma-separated list in Railway env vars.
+// Boot fails in production if empty (no wildcard allowed).
+const ALLOWED_ORIGINS = buildAllowedOrigins(process.env.ALLOWED_ORIGINS);
+if (process.env.NODE_ENV === "production" && ALLOWED_ORIGINS.length === 0) {
+  throw new Error("ALLOWED_ORIGINS is required in production (F-07 CSP/CORS boot guard)");
+}
 
 const app = express();
 const httpServer = createServer(app);
+
+// Railway (and most PaaS) terminate TLS at the edge and forward plain HTTP
+// to the Node process. Without this, req.secure === false and express-session
+// skips setting the Set-Cookie header on Secure cookies, so browsers never
+// receive the session cookie and every request after login returns 401.
+app.set("trust proxy", 1);
+
+// F-07: Helmet — security headers + strict CSP (applied globally).
+app.use(helmetMiddleware(ALLOWED_ORIGINS));
+
+// F-07: CORS + rate limiting apply only to /api routes.
+// Static assets use relative URLs (same-origin) so CORS is irrelevant there;
+// applying it globally caused the browser's crossorigin attribute on <script>/<link>
+// to trigger CORS preflight/rejection for same-domain asset fetches.
+app.use("/api", corsMiddleware(ALLOWED_ORIGINS));
+app.use("/api/auth", authRateLimiter());
+app.use("/api", apiRateLimiter());
 
 declare module "http" {
   interface IncomingMessage {
@@ -22,6 +70,47 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+const PgSession = ConnectPgSimple(session);
+
+app.use(
+  session({
+    store: new PgSession({
+      pool: getPool(),
+      tableName: "session",
+      pruneSessionInterval: 24 * 60 * 60,
+    }),
+    secret: process.env.SESSION_SECRET as string,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 15 * 60 * 1000, // 15-min idle timeout (rolling resets on each request)
+    },
+  }),
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// F-03: Attach a unique request ID to every inbound request so audit rows
+// written during the same HTTP call can be correlated in the audit log.
+app.use((req, _res, next) => {
+  req.requestId = randomUUID();
+  next();
+});
+
+// Auth routes are public (no requireAuth wrapper).
+app.use("/api/auth", authRouter);
+
+// All other /api/* routes require an active session, except /api/health.
+app.use("/api", (req, res, next) => {
+  if (req.path === "/health") return next();
+  return requireAuth(req, res, next);
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -36,7 +125,7 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -60,28 +149,18 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Auto-create database tables on first boot
-  try {
-    const { runMigrations } = await import("./migrate");
-    await runMigrations();
-  } catch (err) {
-    console.error("[startup] Migration failed, continuing anyway:", (err as Error).message);
-  }
+  // Migrations do not run on boot. Per FDA/AGENTS.md §5.2 and D-09 of
+  // FDA/neurogan-erp-build-spec.md, self-mutating schemas are incompatible
+  // with a validated regulated system. Schema changes are applied through
+  // the explicit CI/deploy step `pnpm migrate:up` (drizzle-kit migrate)
+  // which runs only against migrations hand-reviewed into the repo.
+
+  // F-03: Verify the erp_app role cannot UPDATE audit_trail (D-07).
+  await checkAuditTrailImmutability();
 
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    console.error("Internal Server Error:", err);
-
-    if (res.headersSent) {
-      return next(err);
-    }
-
-    return res.status(status).json({ message });
-  });
+  app.use(errorMiddleware);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
