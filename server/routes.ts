@@ -351,7 +351,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/lots", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), async (req, res, next) => {
+  app.post("/api/lots", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res, next) => {
     try {
       const data = insertLotSchema.parse(req.body);
       const lot = await withAudit(
@@ -364,7 +364,7 @@ export async function registerRoutes(
     } catch (err) { next(err); }
   });
 
-  app.patch<{ id: string }>("/api/lots/:id", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), async (req, res, next) => {
+  app.patch<{ id: string }>("/api/lots/:id", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res, next) => {
     try {
       const data = insertLotSchema.partial().parse(req.body);
       const before = await storage.getLot(req.params.id);
@@ -440,7 +440,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/transactions", requireAuth, requireRole("ADMIN", "QA", "PRODUCTION", "RECEIVING"), async (req, res, next) => {
+  app.post("/api/transactions", requireAuth, requireRole("ADMIN", "QA", "PRODUCTION", "WAREHOUSE"), async (req, res, next) => {
     try {
       const data = insertTransactionSchema.parse(req.body);
       const transaction = await withAudit(
@@ -454,7 +454,7 @@ export async function registerRoutes(
   });
 
   // Combo endpoint: create lot + transaction atomically (for PO Receipt)
-  app.post("/api/transactions/po-receipt", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), rejectIdentityInBody(["performedBy"]), async (req, res, next) => {
+  app.post("/api/transactions/po-receipt", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), rejectIdentityInBody(["performedBy"]), async (req, res, next) => {
     try {
       const { lotNumber, supplierName, productId, locationId, quantity, uom, notes } = req.body;
       if (!lotNumber || !productId || !locationId || !quantity || !uom) {
@@ -500,7 +500,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/suppliers", requireAuth, requireRole("ADMIN", "QA", "RECEIVING"), async (req, res, next) => {
+  app.post("/api/suppliers", requireAuth, requireRole("ADMIN", "QA", "WAREHOUSE"), async (req, res, next) => {
     try {
       const data = insertSupplierSchema.parse(req.body);
       const supplier = await storage.createSupplier(data);
@@ -508,7 +508,7 @@ export async function registerRoutes(
     } catch (err) { next(err); }
   });
 
-  app.patch<{ id: string }>("/api/suppliers/:id", requireAuth, requireRole("ADMIN", "QA", "RECEIVING"), async (req, res, next) => {
+  app.patch<{ id: string }>("/api/suppliers/:id", requireAuth, requireRole("ADMIN", "QA", "WAREHOUSE"), async (req, res, next) => {
     try {
       const data = insertSupplierSchema.partial().parse(req.body);
       const supplier = await storage.updateSupplier(req.params.id, data);
@@ -555,7 +555,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/purchase-orders", requireAuth, requireRole("ADMIN", "QA", "RECEIVING"), async (req, res, next) => {
+  app.post("/api/purchase-orders", requireAuth, requireRole("ADMIN", "QA", "WAREHOUSE"), async (req, res, next) => {
     try {
       const { lineItems, ...poData } = req.body;
       const data = insertPurchaseOrderSchema.parse(poData);
@@ -567,7 +567,7 @@ export async function registerRoutes(
     } catch (err) { next(err); }
   });
 
-  app.patch<{ id: string }>("/api/purchase-orders/:id", requireAuth, requireRole("ADMIN", "QA", "RECEIVING"), async (req, res, next) => {
+  app.patch<{ id: string }>("/api/purchase-orders/:id", requireAuth, requireRole("ADMIN", "QA", "WAREHOUSE"), async (req, res, next) => {
     try {
       const po = await storage.updatePurchaseOrder(req.params.id, req.body);
       if (!po) return res.status(404).json({ message: "Purchase order not found" });
@@ -575,7 +575,7 @@ export async function registerRoutes(
     } catch (err) { next(err); }
   });
 
-  app.post<{ id: string }>("/api/purchase-orders/:id/submit", requireAuth, requireRole("ADMIN", "QA", "RECEIVING"), async (req, res, next) => {
+  app.post<{ id: string }>("/api/purchase-orders/:id/submit", requireAuth, requireRole("ADMIN", "QA", "WAREHOUSE"), async (req, res, next) => {
     try {
       const po = await storage.updatePurchaseOrderStatus(req.params.id, "SUBMITTED");
       if (!po) return res.status(404).json({ message: "Purchase order not found" });
@@ -583,7 +583,7 @@ export async function registerRoutes(
     } catch (err) { next(err); }
   });
 
-  app.post<{ id: string }>("/api/purchase-orders/:id/cancel", requireAuth, requireRole("ADMIN", "QA", "RECEIVING"), async (req, res, next) => {
+  app.post<{ id: string }>("/api/purchase-orders/:id/cancel", requireAuth, requireRole("ADMIN", "QA", "WAREHOUSE"), async (req, res, next) => {
     try {
       const po = await storage.updatePurchaseOrderStatus(req.params.id, "CANCELLED");
       if (!po) return res.status(404).json({ message: "Purchase order not found" });
@@ -593,7 +593,7 @@ export async function registerRoutes(
 
   // ─── PO Receiving ──────────────────────────────────────
 
-  app.post("/api/purchase-orders/receive", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), async (req, res) => {
+  app.post("/api/purchase-orders/receive", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res) => {
     try {
       const { lineItemId, quantity, lotNumber, locationId, supplierName, expirationDate, receivedDate } = req.body;
       if (!lineItemId || !quantity || !locationId) {
@@ -973,7 +973,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/suppliers/:id/documents", requireAuth, requireRole("ADMIN", "QA", "RECEIVING"), async (req, res, next) => {
+  app.post("/api/suppliers/:id/documents", requireAuth, requireRole("ADMIN", "QA", "WAREHOUSE"), async (req, res, next) => {
     try {
       const data = { ...req.body, supplierId: req.params.id };
       const doc = await storage.createSupplierDocument(data);
@@ -1039,7 +1039,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/receiving", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), async (req, res, next) => {
+  app.post("/api/receiving", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res, next) => {
     try {
       const data = insertReceivingRecordSchema.parse(req.body);
       const record = await withAudit(
@@ -1052,7 +1052,7 @@ export async function registerRoutes(
     } catch (err) { next(err); }
   });
 
-  app.put<{ id: string }>("/api/receiving/:id", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), async (req, res, next) => {
+  app.put<{ id: string }>("/api/receiving/:id", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res, next) => {
     try {
       const baseSchema = insertReceivingRecordSchema.partial().extend({ visualExamAt: z.coerce.date().optional().nullable() });
       const data = baseSchema.parse(req.body);
@@ -1102,7 +1102,7 @@ export async function registerRoutes(
 
   // ─── COA Documents ────────────────────────────────────
 
-  app.post("/api/coa", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), async (req, res, next) => {
+  app.post("/api/coa", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res, next) => {
     try {
       const data = insertCoaDocumentSchema.parse(req.body);
       const doc = await withAudit(
@@ -1149,7 +1149,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put<{ id: string }>("/api/coa/:id", requireAuth, requireRole("RECEIVING", "QA", "ADMIN"), async (req, res, next) => {
+  app.put<{ id: string }>("/api/coa/:id", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res, next) => {
     try {
       const data = insertCoaDocumentSchema.partial().parse(req.body);
       const before = await storage.getCoaDocument(req.params.id);

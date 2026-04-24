@@ -30,7 +30,7 @@ export const poStatusEnum = pgEnum("po_status", ["DRAFT", "SUBMITTED", "PARTIALL
 // migration dance. The old pgEnum('user_role', ['ADMIN','OPERATOR']) from the
 // Perplexity-built scaffold (see 0000_baseline.sql) is dropped by the F-01
 // migration; nothing in the codebase referenced it.
-export const userRoleEnum = z.enum(["ADMIN", "QA", "PRODUCTION", "RECEIVING", "VIEWER"]);
+export const userRoleEnum = z.enum(["ADMIN", "QA", "PRODUCTION", "WAREHOUSE", "VIEWER"]);
 export type UserRole = z.infer<typeof userRoleEnum>;
 
 export const userStatusEnum = z.enum(["ACTIVE", "DISABLED"]);
@@ -97,6 +97,12 @@ export const receivingRecords = pgTable("erp_receiving_records", {
   qcWorkflowType: text("qc_workflow_type").$type<"FULL_LAB_TEST" | "IDENTITY_CHECK" | "COA_REVIEW" | "EXEMPT" | null>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  samplingPlan: jsonb("sampling_plan").$type<{
+    codeLetterLevel2: string;
+    sampleSize: number;
+    acceptNumber: number;
+    rejectNumber: number;
+  } | null>(),
 });
 
 // Locations
@@ -131,12 +137,15 @@ export const suppliers = pgTable("erp_suppliers", {
 });
 
 // Labs registry
+export const labStatusEnum = z.enum(["ACTIVE", "INACTIVE", "DISQUALIFIED"]);
+export type LabStatus = z.infer<typeof labStatusEnum>;
+
 export const labs = pgTable("erp_labs", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull().unique(),
   address: text("address"),
   type: text("type").notNull().$type<"IN_HOUSE" | "THIRD_PARTY">(),
-  isActive: boolean("is_active").notNull().default(true),
+  status: text("status").notNull().$type<LabStatus>().default("ACTIVE"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -144,6 +153,7 @@ export const labTypeEnum = z.enum(["IN_HOUSE", "THIRD_PARTY"]);
 
 export const insertLabSchema = createInsertSchema(labs, {
   type: labTypeEnum,
+  status: labStatusEnum.default("ACTIVE"),
 }).omit({ id: true, createdAt: true });
 export type Lab = typeof labs.$inferSelect;
 export type InsertLab = z.infer<typeof insertLabSchema>;
@@ -461,6 +471,7 @@ export const insertReceivingRecordSchema = createInsertSchema(receivingRecords).
   qcWorkflowType: true,
   visualExamBy: true,
   qcReviewedBy: true,
+  samplingPlan: true,
 });
 export const insertCoaDocumentSchema = createInsertSchema(coaDocuments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSupplierQualificationSchema = createInsertSchema(supplierQualifications).omit({ id: true, createdAt: true, updatedAt: true });

@@ -24,7 +24,7 @@ export async function seedUsers() {
     { id: seedIds.users.carrieTreat, email: "carrie.treat@neurogan.com", fullName: "Carrie Treat",     title: "QC / PCQI",          passwordHash: carrieHash,   status: "ACTIVE"    as const },
     { id: seedIds.users.prod,        email: "prod@neurogan.com",         fullName: "Production Lead",  title: "Production Lead",    passwordHash: prodHash,     status: "ACTIVE"    as const },
     { id: seedIds.users.prod2,       email: "prod2@neurogan.com",        fullName: "Production Op 2",  title: "Production Operator", passwordHash: prod2Hash,   status: "ACTIVE"    as const },
-    { id: seedIds.users.recv,        email: "recv@neurogan.com",         fullName: "Receiving Clerk",  title: "Receiving",          passwordHash: recvHash,     status: "ACTIVE"    as const },
+    { id: seedIds.users.recv,        email: "recv@neurogan.com",         fullName: "Warehouse Clerk",  title: "Warehouse",          passwordHash: recvHash,     status: "ACTIVE"    as const },
     { id: seedIds.users.viewer,      email: "viewer@neurogan.com",       fullName: "Read-Only Viewer", title: "Viewer",             passwordHash: viewerHash,   status: "ACTIVE"    as const },
     { id: seedIds.users.disabled,    email: "disabled@neurogan.com",     fullName: "Disabled User",    title: "Former Op",          passwordHash: disabledHash, status: "DISABLED"  as const },
   ];
@@ -40,7 +40,7 @@ export async function seedUsers() {
     { userId: seedIds.users.carrieTreat, role: "ADMIN",      grantedByUserId: seedIds.users.admin },
     { userId: seedIds.users.prod,        role: "PRODUCTION", grantedByUserId: seedIds.users.admin },
     { userId: seedIds.users.prod2,       role: "PRODUCTION", grantedByUserId: seedIds.users.admin },
-    { userId: seedIds.users.recv,        role: "RECEIVING",  grantedByUserId: seedIds.users.admin },
+    { userId: seedIds.users.recv,        role: "WAREHOUSE",  grantedByUserId: seedIds.users.admin },
     { userId: seedIds.users.viewer,      role: "VIEWER",     grantedByUserId: seedIds.users.admin },
     { userId: seedIds.users.disabled,    role: "PRODUCTION", grantedByUserId: seedIds.users.admin },
   ];

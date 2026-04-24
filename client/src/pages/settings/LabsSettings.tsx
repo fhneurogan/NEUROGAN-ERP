@@ -13,9 +13,15 @@ interface Lab {
   name: string;
   address: string | null;
   type: "IN_HOUSE" | "THIRD_PARTY";
-  isActive: boolean;
+  status: "ACTIVE" | "INACTIVE" | "DISQUALIFIED";
   createdAt: string;
 }
+
+const statusBadge = (status: Lab["status"]) => {
+  if (status === "ACTIVE") return <Badge className="text-[10px] bg-green-100 text-green-800 border-green-200">Active</Badge>;
+  if (status === "DISQUALIFIED") return <Badge variant="destructive" className="text-[10px]">Disqualified</Badge>;
+  return <Badge variant="outline" className="text-[10px] text-muted-foreground">Inactive</Badge>;
+};
 
 export function LabsSettings() {
   const { toast } = useToast();
@@ -41,10 +47,9 @@ export function LabsSettings() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Omit<Partial<Lab>, "id" | "createdAt"> }) => {
-      setPatchingId(id);
-      return apiRequest("PATCH", `/api/labs/${id}`, data);
-    },
+    mutationFn: ({ id, data }: { id: string; data: { status?: Lab["status"]; name?: string; address?: string | null; type?: Lab["type"] } }) =>
+      apiRequest("PATCH", `/api/labs/${id}`, data),
+    onMutate: ({ id }) => { setPatchingId(id); },
     onSettled: () => setPatchingId(null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/labs"] });
@@ -74,19 +79,25 @@ export function LabsSettings() {
                 <Badge variant={lab.type === "IN_HOUSE" ? "default" : "secondary"} className="text-[10px]">
                   {lab.type === "IN_HOUSE" ? "In-House" : "Third Party"}
                 </Badge>
-                {!lab.isActive && <Badge variant="outline" className="text-[10px] text-muted-foreground">Inactive</Badge>}
               </div>
               {lab.address && <div className="text-xs text-muted-foreground mt-0.5">{lab.address}</div>}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-xs"
-              onClick={() => patchMutation.mutate({ id: lab.id, data: { isActive: !lab.isActive } })}
+            <Select
+              value={lab.status}
+              onValueChange={(val) =>
+                patchMutation.mutate({ id: lab.id, data: { status: val as Lab["status"] } })
+              }
               disabled={patchingId === lab.id}
             >
-              {lab.isActive ? "Deactivate" : "Reactivate"}
-            </Button>
+              <SelectTrigger className="h-7 w-32 text-xs">
+                {statusBadge(lab.status)}
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="INACTIVE">Inactive</SelectItem>
+                <SelectItem value="DISQUALIFIED">Disqualified</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         ))}
         {labs.length === 0 && (

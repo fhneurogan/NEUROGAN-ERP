@@ -1,4 +1,5 @@
 import { eq, ne, desc, asc, and, sql, gte, lte, inArray, getTableColumns, type SQL } from "drizzle-orm";
+import { computeZ14Plan } from "./lib/z14-sampling";
 import { db, type Tx } from "./db";
 import * as schema from "@shared/schema";
 import {
@@ -56,6 +57,8 @@ import { assertNotLocked, assertValidTransition } from "./state/transitions";
 // ─── QC Workflow type derivation ──────────────────────────────────────────────
 
 type QcWorkflowType = "FULL_LAB_TEST" | "IDENTITY_CHECK" | "COA_REVIEW" | "EXEMPT";
+
+const IDENTITY_REQUIRED_WORKFLOWS: QcWorkflowType[] = ["FULL_LAB_TEST", "IDENTITY_CHECK"];
 
 // ─── Visual inspection gate ───────────────────────────────────────────────────
 
@@ -1488,9 +1491,17 @@ export class DatabaseStorage implements IStorage {
         tx,
       );
 
+      let samplingPlan = null;
+      if (qcWorkflowType === "FULL_LAB_TEST" && data.quantityReceived !== null && data.quantityReceived !== undefined) {
+        const lotSize = Math.round(Number(data.quantityReceived));
+        if (lotSize > 0 && !isNaN(lotSize)) {
+          samplingPlan = computeZ14Plan(lotSize, 2.5);
+        }
+      }
+
       const [record] = await tx
         .insert(schema.receivingRecords)
-        .values({ ...data, qcWorkflowType, requiresQualification })
+        .values({ ...data, qcWorkflowType, requiresQualification, samplingPlan })
         .returning();
 
       await tx
@@ -1591,18 +1602,50 @@ export class DatabaseStorage implements IStorage {
         disposition === "APPROVED" || disposition === "APPROVED_WITH_CONDITIONS" ? "APPROVED" : "REJECTED";
       assertValidTransition("receiving_record", existing.status, newStatus);
 
-      // Gate 3: require at least one COA before APPROVED
+      // Gate 3: require at least one COA; reject if any lab-linked COA references a non-ACTIVE lab
       if (newStatus === "APPROVED") {
-        const [coa] = await tx
-          .select({ id: schema.coaDocuments.id })
+        const coas = await tx
+          .select({
+            id: schema.coaDocuments.id,
+            labId: schema.coaDocuments.labId,
+            identityConfirmed: schema.coaDocuments.identityConfirmed,
+          })
           .from(schema.coaDocuments)
-          .where(eq(schema.coaDocuments.lotId, existing.lotId))
-          .limit(1);
-        if (!coa) {
+          .where(eq(schema.coaDocuments.lotId, existing.lotId));
+        if (coas.length === 0) {
           throw Object.assign(
             new Error("Cannot approve: no COA document is linked to this lot. Attach a COA before approving."),
             { status: 422 },
           );
+        }
+        for (const coa of coas) {
+          // Supplier COAs (labId = null) are not required to reference the lab registry.
+          // Lab-linked COAs must come from an ACTIVE lab.
+          if (!coa.labId) continue; // supplier COA — no lab registry entry required
+          const [lab] = await tx
+            .select({ status: schema.labs.status })
+            .from(schema.labs)
+            .where(eq(schema.labs.id, coa.labId));
+          if (lab && lab.status !== "ACTIVE") {
+            throw Object.assign(
+              new Error(`Cannot approve: a COA on this lot is linked to a lab with status "${lab.status}". Update the lab status in Settings or remove the COA before approving.`),
+              { status: 422 },
+            );
+          }
+        }
+
+        // Gate 3b: identity workflows require that at least one COA on this lot has identityConfirmed = "true"
+        if (IDENTITY_REQUIRED_WORKFLOWS.includes(existing.qcWorkflowType as QcWorkflowType)) {
+          const identityConfirmed = coas.some((c) => c.identityConfirmed === "true");
+          if (!identityConfirmed) {
+            throw Object.assign(
+              new Error(
+                "Cannot approve: this workflow requires identity testing but no COA on this lot has identity confirmed. " +
+                "Update the COA to mark identity as confirmed before approving.",
+              ),
+              { status: 422 },
+            );
+          }
         }
       }
 
@@ -1718,6 +1761,22 @@ export class DatabaseStorage implements IStorage {
     const run = async (tx: Tx) => {
       const [existing] = await tx.select().from(schema.coaDocuments).where(eq(schema.coaDocuments.id, id));
       if (!existing) return undefined;
+
+      // Gate: lab must be ACTIVE to accept a COA
+      // Supplier COAs (labId = null) are accepted without lab-status check.
+      // Only COAs explicitly linked to a lab registry entry enforce the ACTIVE requirement.
+      if (accepted && existing.labId) {
+        const [lab] = await tx
+          .select({ status: schema.labs.status })
+          .from(schema.labs)
+          .where(eq(schema.labs.id, existing.labId));
+        if (lab && lab.status !== "ACTIVE") {
+          throw Object.assign(
+            new Error(`Cannot accept COA: the linked lab has status "${lab.status}". Only ACTIVE labs are accepted.`),
+            { status: 422 },
+          );
+        }
+      }
 
       const reviewer = await tx.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, reviewedByUserId));
       const reviewerName = reviewer[0]?.fullName ?? reviewedByUserId;
@@ -2337,11 +2396,11 @@ export class DatabaseStorage implements IStorage {
   async getUserTasks(_userId: string, roles: string[]): Promise<UserTask[]> {
     // _userId reserved for future per-user scoped task types; currently returns all active records for the role.
     const tasks: UserTask[] = [];
-    // ADMIN gets both QA and RECEIVING tasks. No deduplication risk: QA queries FULL_LAB_TEST
-    // in QUARANTINED/SAMPLING + PENDING_QC; RECEIVING queries IDENTITY_CHECK/QUARANTINED + REJECTED.
+    // ADMIN gets both QA and WAREHOUSE tasks. No deduplication risk: QA queries FULL_LAB_TEST
+    // in QUARANTINED/SAMPLING + PENDING_QC; WAREHOUSE queries IDENTITY_CHECK/QUARANTINED + REJECTED.
     // These are disjoint by qcWorkflowType/status combinations under current state machine rules.
     const isQa = roles.includes("QA") || roles.includes("ADMIN");
-    const isReceiving = roles.includes("RECEIVING") || roles.includes("ADMIN");
+    const isWarehouse = roles.includes("WAREHOUSE") || roles.includes("ADMIN");
 
     const baseSelect = {
       id: schema.receivingRecords.id,
@@ -2409,7 +2468,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    if (isReceiving) {
+    if (isWarehouse) {
       const identityCheckRows = await db
         .select(baseSelect)
         .from(schema.receivingRecords)

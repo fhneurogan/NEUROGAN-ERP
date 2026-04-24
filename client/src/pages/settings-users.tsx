@@ -55,7 +55,7 @@ import { Plus, Copy, ShieldAlert, UserX, UserCheck, KeyRound } from "lucide-reac
 
 // All five spec roles. Checkbox layout is simpler than a multi-select while
 // the role set is small; revisit if the set grows.
-const ALL_ROLES = ["ADMIN", "QA", "PRODUCTION", "RECEIVING", "VIEWER"] as const;
+const ALL_ROLES = ["ADMIN", "QA", "PRODUCTION", "WAREHOUSE", "VIEWER"] as const;
 type Role = (typeof ALL_ROLES)[number];
 
 interface UserRow {
