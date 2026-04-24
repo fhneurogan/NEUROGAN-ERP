@@ -916,7 +916,7 @@ export const labTestResults = pgTable("erp_lab_test_results", {
 });
 
 export const insertLabTestResultSchema = createInsertSchema(labTestResults).omit({
-  id: true, createdAt: true, testedAt: true, testedByUserId: true,
+  id: true, createdAt: true, testedAt: true, testedByUserId: true, coaDocumentId: true,
 });
 export type InsertLabTestResult = z.infer<typeof insertLabTestResultSchema>;
 export type LabTestResult = typeof labTestResults.$inferSelect;

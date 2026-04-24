@@ -113,7 +113,6 @@ describeIfDb("T06 — per-analyte lab test results", () => {
     const result = await storage.addLabTestResult(
       coaId,
       {
-        coaDocumentId: coaId,
         analyteName: "CBD",
         resultValue: "25.3",
         resultUnits: "mg/g",
@@ -138,7 +137,6 @@ describeIfDb("T06 — per-analyte lab test results", () => {
     const result = await storage.addLabTestResult(
       coaId,
       {
-        coaDocumentId: coaId,
         analyteName: "Heavy Metals",
         resultValue: "12",
         resultUnits: "ppm",

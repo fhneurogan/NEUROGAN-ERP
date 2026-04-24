@@ -1203,7 +1203,7 @@ export async function registerRoutes(
 
   // §111.75: lab result entry — LAB_TECH performs, QA/ADMIN can also enter
   app.post<{ id: string }>("/api/coa/:id/results",
-    requireAuth, requireRole("LAB_TECH", "QA", "ADMIN"),
+    requireAuth, requireRole("LAB_TECH", "QA", "ADMIN"), rejectIdentityInBody(["testedByUserId", "coaDocumentId"]),
     async (req, res, next) => {
       try {
         const data = insertLabTestResultSchema.parse(req.body);
