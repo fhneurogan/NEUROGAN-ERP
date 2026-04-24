@@ -28,6 +28,7 @@ import {
   type BottleneckMaterial, type LowestCapacityProduct, type DashboardSupplyChain,
   type ReceivingRecord, type InsertReceivingRecord, type ReceivingRecordWithDetails,
   type CoaDocument, type InsertCoaDocument, type CoaDocumentWithDetails,
+  type LabTestResult, type InsertLabTestResult,
   type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
@@ -1859,6 +1860,30 @@ export class DatabaseStorage implements IStorage {
 
   async getCoasByLot(lotId: string): Promise<CoaDocumentWithDetails[]> {
     return this.getCoaDocuments({ lotId });
+  }
+
+  // ─── Lab Test Results (T-06) ────────────────────────
+
+  async addLabTestResult(coaId: string, data: InsertLabTestResult, userId: string, tx?: Tx): Promise<LabTestResult> {
+    const [result] = await (tx ?? db).insert(schema.labTestResults).values({
+      ...data,
+      coaDocumentId: coaId,
+      testedByUserId: userId,
+    }).returning();
+
+    if (!data.pass) {
+      await (tx ?? db).update(schema.coaDocuments)
+        .set({ overallResult: "FAIL" })
+        .where(eq(schema.coaDocuments.id, coaId));
+    }
+
+    return result!;
+  }
+
+  async getLabTestResults(coaId: string): Promise<LabTestResult[]> {
+    return db.select().from(schema.labTestResults)
+      .where(eq(schema.labTestResults.coaDocumentId, coaId))
+      .orderBy(schema.labTestResults.testedAt);
   }
 
   // ─── Supplier Qualifications ─────────────────────────
