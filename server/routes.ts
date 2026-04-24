@@ -20,6 +20,7 @@ import {
   insertBprStepSchema,
   insertBprDeviationSchema,
   insertLabSchema,
+  insertLabTestResultSchema,
   userRoleEnum,
   userStatusEnum,
   type UserResponse,
@@ -1102,7 +1103,7 @@ export async function registerRoutes(
 
   // ─── COA Documents ────────────────────────────────────
 
-  app.post("/api/coa", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"), async (req, res, next) => {
+  app.post("/api/coa", requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN", "LAB_TECH"), async (req, res, next) => {
     try {
       const data = insertCoaDocumentSchema.parse(req.body);
       const doc = await withAudit(
@@ -1197,6 +1198,34 @@ export async function registerRoutes(
       }
     },
   );
+
+  // ─── Lab Test Results (T-06 §111.75) ─────────────────
+
+  // §111.75: lab result entry — LAB_TECH performs, QA/ADMIN can also enter
+  app.post<{ id: string }>("/api/coa/:id/results",
+    requireAuth, requireRole("LAB_TECH", "QA", "ADMIN"), rejectIdentityInBody(["testedByUserId", "coaDocumentId"]),
+    async (req, res, next) => {
+      try {
+        const coa = await storage.getCoaDocument(req.params.id);
+        if (!coa) return res.status(404).json({ message: "COA document not found" });
+        const data = insertLabTestResultSchema.parse(req.body);
+        const result = await withAudit(
+          { userId: req.user!.id, action: "CREATE", entityType: "lab_test_result",
+            entityId: (r) => (r as { id: string }).id, before: null,
+            route: `${req.method} ${req.path}`, requestId: req.requestId },
+          (tx) => storage.addLabTestResult(req.params.id, data, req.user!.id, tx),
+        );
+        res.status(201).json(result);
+      } catch (err) { next(err); }
+    },
+  );
+
+  app.get<{ id: string }>("/api/coa/:id/results", requireAuth, async (req, res, next) => {
+    try {
+      const results = await storage.getLabTestResults(req.params.id);
+      res.json(results);
+    } catch (err) { next(err); }
+  });
 
   // ─── Supplier Qualifications ──────────────────────────
 

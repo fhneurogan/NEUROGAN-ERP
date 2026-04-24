@@ -28,6 +28,7 @@ import {
   type BottleneckMaterial, type LowestCapacityProduct, type DashboardSupplyChain,
   type ReceivingRecord, type InsertReceivingRecord, type ReceivingRecordWithDetails,
   type CoaDocument, type InsertCoaDocument, type CoaDocumentWithDetails,
+  type LabTestResult, type InsertLabTestResult,
   type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
@@ -448,6 +449,70 @@ export class DatabaseStorage implements IStorage {
     if (!product) throw new Error("Product not found");
 
     const supplier = await this.getSupplier(po.supplierId);
+
+    // §111.75: a lot is the unit of testing. Multiple deliveries of the same
+    // lot number do not trigger new testing — the lot was already tested.
+    const [existingLot] = await db
+      .select({ id: schema.lots.id, quarantineStatus: schema.lots.quarantineStatus })
+      .from(schema.lots)
+      .where(and(
+        eq(schema.lots.lotNumber, lotNumber),
+        eq(schema.lots.productId, lineItem.productId),
+      ));
+
+    if (existingLot) {
+      if (existingLot.quarantineStatus === "REJECTED") {
+        throw Object.assign(
+          new Error("Cannot receive additional quantity for a rejected lot without QA override."),
+          { status: 422 },
+        );
+      }
+      // Lot in-progress or approved — attach to existing lot, no new QC work needed.
+      // Insert directly (bypassing createReceivingRecord) to force qcWorkflowType=EXEMPT,
+      // since createReceivingRecord always re-derives the workflow from the category matrix.
+      // We intentionally do NOT sync lots.quarantineStatus here: for an APPROVED lot we must
+      // not regress it back to QUARANTINED, and for an in-progress lot the new EXEMPT receipt
+      // must not override the active workflow state. The existing lot's status is authoritative.
+      return db.transaction(async (tx) => {
+        const rcvId = await this.getNextReceivingIdentifier();
+        await tx.insert(schema.receivingRecords).values({
+          purchaseOrderId: po.id,
+          lotId: existingLot.id,
+          uniqueIdentifier: rcvId,
+          dateReceived: receivedDate ?? new Date().toISOString().slice(0, 10),
+          quantityReceived: String(quantity),
+          uom: lineItem.uom,
+          supplierLotNumber: lotNumber,
+          status: "QUARANTINED",
+          qcWorkflowType: "EXEMPT",
+          requiresQualification: false,
+        });
+        const transaction = await this.createTransaction({
+          lotId: existingLot.id,
+          locationId,
+          type: "PO_RECEIPT",
+          quantity: String(Math.abs(quantity)),
+          uom: lineItem.uom,
+          notes: `Received against PO ${po.poNumber} (existing lot)`,
+          performedBy: "admin",
+        });
+        const newReceivedQty = parseFloat(lineItem.quantityReceived) + Math.abs(quantity);
+        await tx.update(schema.poLineItems).set({ quantityReceived: String(newReceivedQty) }).where(eq(schema.poLineItems.id, lineItemId));
+        // Keep PO status in sync — same logic as normal flow path
+        const updatedLineItems = await tx.select().from(schema.poLineItems).where(eq(schema.poLineItems.purchaseOrderId, po.id));
+        const allFull = updatedLineItems.every(li => parseFloat(li.quantityReceived) >= parseFloat(li.quantityOrdered));
+        const someReceived = updatedLineItems.some(li => parseFloat(li.quantityReceived) > 0);
+        if (allFull) {
+          await this.updatePurchaseOrderStatus(po.id, "CLOSED");
+        } else if (someReceived) {
+          await this.updatePurchaseOrderStatus(po.id, "PARTIALLY_RECEIVED");
+        }
+        const [fullLot] = await tx.select().from(schema.lots).where(eq(schema.lots.id, existingLot.id));
+        return { lot: fullLot! as Lot, transaction };
+      });
+    }
+
+    // No existing lot — continue with normal flow (createLot + createReceivingRecord)
 
     // Create lot
     const lot = await this.createLot({
@@ -1797,6 +1862,30 @@ export class DatabaseStorage implements IStorage {
     return this.getCoaDocuments({ lotId });
   }
 
+  // ─── Lab Test Results (T-06) ────────────────────────
+
+  async addLabTestResult(coaId: string, data: InsertLabTestResult, userId: string, tx?: Tx): Promise<LabTestResult> {
+    const [result] = await (tx ?? db).insert(schema.labTestResults).values({
+      ...data,
+      coaDocumentId: coaId,
+      testedByUserId: userId,
+    }).returning();
+
+    if (!data.pass) {
+      await (tx ?? db).update(schema.coaDocuments)
+        .set({ overallResult: "FAIL" })
+        .where(eq(schema.coaDocuments.id, coaId));
+    }
+
+    return result!;
+  }
+
+  async getLabTestResults(coaId: string): Promise<LabTestResult[]> {
+    return db.select().from(schema.labTestResults)
+      .where(eq(schema.labTestResults.coaDocumentId, coaId))
+      .orderBy(schema.labTestResults.testedAt);
+  }
+
   // ─── Supplier Qualifications ─────────────────────────
 
   private async enrichSupplierQualification(sq: SupplierQualification): Promise<SupplierQualificationWithDetails> {
@@ -2396,9 +2485,11 @@ export class DatabaseStorage implements IStorage {
   async getUserTasks(_userId: string, roles: string[]): Promise<UserTask[]> {
     // _userId reserved for future per-user scoped task types; currently returns all active records for the role.
     const tasks: UserTask[] = [];
-    // ADMIN gets both QA and WAREHOUSE tasks. No deduplication risk: QA queries FULL_LAB_TEST
-    // in QUARANTINED/SAMPLING + PENDING_QC; WAREHOUSE queries IDENTITY_CHECK/QUARANTINED + REJECTED.
-    // These are disjoint by qcWorkflowType/status combinations under current state machine rules.
+    // ADMIN gets LAB_TECH, QA and WAREHOUSE tasks. No deduplication risk: LAB_TECH queries
+    // FULL_LAB_TEST in QUARANTINED/SAMPLING; QA queries PENDING_QC; WAREHOUSE queries
+    // IDENTITY_CHECK/QUARANTINED + REJECTED. These are disjoint by qcWorkflowType/status
+    // combinations under current state machine rules.
+    const isLabTech = roles.includes("LAB_TECH") || roles.includes("ADMIN");
     const isQa = roles.includes("QA") || roles.includes("ADMIN");
     const isWarehouse = roles.includes("WAREHOUSE") || roles.includes("ADMIN");
 
@@ -2415,7 +2506,8 @@ export class DatabaseStorage implements IStorage {
       supplierName: schema.suppliers.name,
     };
 
-    if (isQa) {
+    // §111.12(c): LAB_TECH performs sampling and lab tests; QA makes the final disposition.
+    if (isLabTech) {
       const labTestRows = await db
         .select(baseSelect)
         .from(schema.receivingRecords)
@@ -2443,7 +2535,9 @@ export class DatabaseStorage implements IStorage {
           isUrgent: !!row.requiresQualification,
         });
       }
+    }
 
+    if (isQa) {
       const pendingQcRows = await db
         .select(baseSelect)
         .from(schema.receivingRecords)

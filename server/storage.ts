@@ -24,6 +24,7 @@ import {
   type DashboardSupplyChain,
   type ReceivingRecord, type InsertReceivingRecord, type ReceivingRecordWithDetails,
   type CoaDocument, type InsertCoaDocument, type CoaDocumentWithDetails,
+  type LabTestResult, type InsertLabTestResult,
   type SupplierQualification, type InsertSupplierQualification, type SupplierQualificationWithDetails,
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
@@ -296,6 +297,10 @@ export interface IStorage {
   updateCoaDocument(id: string, data: Partial<InsertCoaDocument>, tx?: Tx): Promise<CoaDocument | undefined>;
   qcReviewCoa(id: string, accepted: boolean, reviewedByUserId: string, notes?: string, tx?: Tx): Promise<CoaDocument | undefined>;
   getCoasByLot(lotId: string): Promise<CoaDocumentWithDetails[]>;
+
+  // Lab Test Results (T-06)
+  addLabTestResult(coaId: string, data: InsertLabTestResult, userId: string, tx?: Tx): Promise<LabTestResult>;
+  getLabTestResults(coaId: string): Promise<LabTestResult[]>;
 
   // Supplier Qualifications
   getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]>;

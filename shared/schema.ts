@@ -30,7 +30,7 @@ export const poStatusEnum = pgEnum("po_status", ["DRAFT", "SUBMITTED", "PARTIALL
 // migration dance. The old pgEnum('user_role', ['ADMIN','OPERATOR']) from the
 // Perplexity-built scaffold (see 0000_baseline.sql) is dropped by the F-01
 // migration; nothing in the codebase referenced it.
-export const userRoleEnum = z.enum(["ADMIN", "QA", "PRODUCTION", "WAREHOUSE", "VIEWER"]);
+export const userRoleEnum = z.enum(["ADMIN", "QA", "PRODUCTION", "WAREHOUSE", "LAB_TECH", "VIEWER"]);
 export type UserRole = z.infer<typeof userRoleEnum>;
 
 export const userStatusEnum = z.enum(["ACTIVE", "DISABLED"]);
@@ -896,3 +896,27 @@ export const insertValidationDocumentSchema = createInsertSchema(validationDocum
 export const selectValidationDocumentSchema = createSelectSchema(validationDocuments);
 export type InsertValidationDocument = z.infer<typeof insertValidationDocumentSchema>;
 export type SelectValidationDocument = z.infer<typeof selectValidationDocumentSchema>;
+
+// T-06: Per-analyte lab test results (21 CFR §111.75 — test against specifications)
+// Each row records one analyte result linked to a COA document and the person
+// who performed the test. coaDocumentId uses varchar to match coaDocuments.id.
+export const labTestResults = pgTable("erp_lab_test_results", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  coaDocumentId: varchar("coa_document_id").notNull().references(() => coaDocuments.id),
+  analyteName: text("analyte_name").notNull(),
+  resultValue: text("result_value").notNull(),
+  resultUnits: text("result_units"),
+  specMin: text("spec_min"),
+  specMax: text("spec_max"),
+  pass: boolean("pass").notNull(),
+  testedByUserId: uuid("tested_by_user_id").notNull().references(() => users.id),
+  testedAt: timestamp("tested_at", { withTimezone: true }).notNull().defaultNow(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertLabTestResultSchema = createInsertSchema(labTestResults).omit({
+  id: true, createdAt: true, testedAt: true, testedByUserId: true, coaDocumentId: true,
+});
+export type InsertLabTestResult = z.infer<typeof insertLabTestResultSchema>;
+export type LabTestResult = typeof labTestResults.$inferSelect;
