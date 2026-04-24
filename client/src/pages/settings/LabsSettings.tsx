@@ -20,14 +20,15 @@ interface Lab {
 export function LabsSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data: labs = [], isLoading } = useQuery<Lab[]>({ queryKey: ["/api/labs"] });
+  const { data: labs = [], isLoading, isError } = useQuery<Lab[]>({ queryKey: ["/api/labs"] });
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [type, setType] = useState<"IN_HOUSE" | "THIRD_PARTY">("THIRD_PARTY");
+  const [patchingId, setPatchingId] = useState<string | null>(null);
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; address: string; type: string }) =>
+    mutationFn: (data: { name: string; address: string | null; type: string }) =>
       apiRequest("POST", "/api/labs", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/labs"] });
@@ -36,20 +37,26 @@ export function LabsSettings() {
       setType("THIRD_PARTY");
       toast({ title: "Lab added" });
     },
-    onError: () => toast({ title: "Failed to add lab", variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed to add lab", description: err.message, variant: "destructive" }),
   });
 
   const patchMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Lab> }) =>
-      apiRequest("PATCH", `/api/labs/${id}`, data),
+    mutationFn: ({ id, data }: { id: string; data: Omit<Partial<Lab>, "id" | "createdAt"> }) => {
+      setPatchingId(id);
+      return apiRequest("PATCH", `/api/labs/${id}`, data);
+    },
+    onSettled: () => setPatchingId(null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/labs"] });
       toast({ title: "Lab updated" });
     },
-    onError: () => toast({ title: "Failed to update lab", variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Failed to update lab", description: err.message, variant: "destructive" }),
   });
 
   if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+  if (isError) return (
+    <div className="p-6 text-sm text-destructive">Could not load labs. Refresh to try again.</div>
+  );
 
   return (
     <div className="p-6 max-w-2xl space-y-6">
@@ -76,6 +83,7 @@ export function LabsSettings() {
               size="sm"
               className="text-xs"
               onClick={() => patchMutation.mutate({ id: lab.id, data: { isActive: !lab.isActive } })}
+              disabled={patchingId === lab.id}
             >
               {lab.isActive ? "Deactivate" : "Reactivate"}
             </Button>
@@ -112,8 +120,8 @@ export function LabsSettings() {
         </div>
         <Button
           size="sm"
-          onClick={() => createMutation.mutate({ name, address, type })}
-          disabled={!name || createMutation.isPending}
+          onClick={() => createMutation.mutate({ name: name.trim(), address: address.trim() || null, type })}
+          disabled={!name.trim() || createMutation.isPending}
         >
           Add lab
         </Button>

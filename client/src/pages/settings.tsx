@@ -613,7 +613,7 @@ function ValidationEmbed() {
 
 function LabsEmbed() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+    <Suspense fallback={<div className="p-6"><Skeleton className="h-96 w-full" /></div>}>
       <LazyLabsSettings />
     </Suspense>
   );
@@ -621,7 +621,7 @@ function LabsEmbed() {
 
 function ApprovedMaterialsEmbed() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+    <Suspense fallback={<div className="p-6"><Skeleton className="h-96 w-full" /></div>}>
       <LazyApprovedMaterials />
     </Suspense>
   );
