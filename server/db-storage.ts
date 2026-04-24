@@ -1594,7 +1594,11 @@ export class DatabaseStorage implements IStorage {
       // Gate 3: require at least one COA; reject if any lab-linked COA references a non-ACTIVE lab
       if (newStatus === "APPROVED") {
         const coas = await tx
-          .select({ id: schema.coaDocuments.id, labId: schema.coaDocuments.labId })
+          .select({
+            id: schema.coaDocuments.id,
+            labId: schema.coaDocuments.labId,
+            identityConfirmed: schema.coaDocuments.identityConfirmed,
+          })
           .from(schema.coaDocuments)
           .where(eq(schema.coaDocuments.lotId, existing.lotId));
         if (coas.length === 0) {
@@ -1614,6 +1618,21 @@ export class DatabaseStorage implements IStorage {
           if (lab && lab.status !== "ACTIVE") {
             throw Object.assign(
               new Error(`Cannot approve: a COA on this lot is linked to a lab with status "${lab.status}". Update the lab status in Settings or remove the COA before approving.`),
+              { status: 422 },
+            );
+          }
+        }
+
+        // Gate 3b: identity workflows require identity confirmation on at least one COA
+        const IDENTITY_REQUIRED_WORKFLOWS: Array<string | null> = ["FULL_LAB_TEST", "IDENTITY_CHECK"];
+        if (IDENTITY_REQUIRED_WORKFLOWS.includes(existing.qcWorkflowType ?? null)) {
+          const identityConfirmed = coas.some((c) => c.identityConfirmed === "true");
+          if (!identityConfirmed) {
+            throw Object.assign(
+              new Error(
+                "Cannot approve: this workflow requires identity testing but no COA on this lot has identity confirmed. " +
+                "Update the COA to mark identity as confirmed before approving.",
+              ),
               { status: 422 },
             );
           }
