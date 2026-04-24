@@ -105,4 +105,26 @@ describeIfDb("R-01 — labs registry", () => {
       .set("x-test-user-id", viewer.id);
     expect(res.status).toBe(403);
   });
+
+  it("POST /api/labs returns 403 for VIEWER", async () => {
+    const viewer = await seedViewer("viewer-post@labs.test", adminId);
+    const res = await request(app)
+      .post("/api/labs")
+      .set("x-test-user-id", viewer.id)
+      .send({ name: "Unauthorized Lab", type: "THIRD_PARTY" });
+    expect(res.status).toBe(403);
+  });
+
+  it("PATCH /api/labs/:id returns 403 for VIEWER", async () => {
+    const created = await request(app)
+      .post("/api/labs")
+      .set("x-test-user-id", adminId)
+      .send({ name: "Lab For Patch Auth Test", type: "IN_HOUSE" });
+    const viewer = await seedViewer("viewer-patch@labs.test", adminId);
+    const res = await request(app)
+      .patch(`/api/labs/${(created.body as { id: string }).id}`)
+      .set("x-test-user-id", viewer.id)
+      .send({ isActive: false });
+    expect(res.status).toBe(403);
+  });
 });

@@ -140,7 +140,11 @@ export const labs = pgTable("erp_labs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertLabSchema = createInsertSchema(labs).omit({ id: true, createdAt: true });
+export const labTypeEnum = z.enum(["IN_HOUSE", "THIRD_PARTY"]);
+
+export const insertLabSchema = createInsertSchema(labs, {
+  type: labTypeEnum,
+}).omit({ id: true, createdAt: true });
 export type Lab = typeof labs.$inferSelect;
 export type InsertLab = z.infer<typeof insertLabSchema>;
 
