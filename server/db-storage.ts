@@ -2331,8 +2331,12 @@ export class DatabaseStorage implements IStorage {
 
   // ─── User tasks (R-01) ─────────────────────────────────
 
-  async getUserTasks(userId: string, roles: string[]): Promise<UserTask[]> {
+  async getUserTasks(_userId: string, roles: string[]): Promise<UserTask[]> {
+    // _userId reserved for future per-user scoped task types; currently returns all active records for the role.
     const tasks: UserTask[] = [];
+    // ADMIN gets both QA and RECEIVING tasks. No deduplication risk: QA queries FULL_LAB_TEST
+    // in QUARANTINED/SAMPLING + PENDING_QC; RECEIVING queries IDENTITY_CHECK/QUARANTINED + REJECTED.
+    // These are disjoint by qcWorkflowType/status combinations under current state machine rules.
     const isQa = roles.includes("QA") || roles.includes("ADMIN");
     const isReceiving = roles.includes("RECEIVING") || roles.includes("ADMIN");
 
@@ -2359,7 +2363,7 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             eq(schema.receivingRecords.qcWorkflowType, "FULL_LAB_TEST"),
-            sql`${schema.receivingRecords.status} IN ('QUARANTINED', 'SAMPLING')`,
+            inArray(schema.receivingRecords.status, ["QUARANTINED", "SAMPLING"]),
           ),
         );
 

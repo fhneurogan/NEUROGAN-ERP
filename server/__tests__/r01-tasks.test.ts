@@ -13,12 +13,16 @@ const describeIfDb = dbUrl ? describe : describe.skip;
 async function cleanDb() {
   await db.update(schema.validationDocuments).set({ signatureId: null });
   await db.delete(schema.electronicSignatures);
+  await db.delete(schema.coaDocuments);
   await db.delete(schema.receivingRecords);
   await db.delete(schema.approvedMaterials);
   await db.delete(schema.auditTrail);
   await db.delete(schema.passwordHistory);
   await db.delete(schema.userRoles);
   await db.delete(schema.users);
+  await db.delete(schema.lots);
+  await db.delete(schema.products);
+  await db.delete(schema.suppliers);
 }
 
 async function seedReceivingRecord(opts: { status: string; qcWorkflowType: string; requiresQualification?: boolean; productName?: string }) {

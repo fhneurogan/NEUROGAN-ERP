@@ -376,7 +376,7 @@ export interface IStorage {
   createApprovedMaterial(productId: string, supplierId: string, approvedByUserId: string, notes?: string, tx?: Tx): Promise<ApprovedMaterial>;
 
   // ─── User tasks (R-01) ─────────────────────────────────
-  getUserTasks(userId: string, roles: string[]): Promise<UserTask[]>;
+  getUserTasks(_userId: string, roles: string[]): Promise<UserTask[]>;
 }
 
 export interface AuditFilters {
