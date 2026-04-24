@@ -170,7 +170,11 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
     {
       label: "Visual Inspection",
       description: record.visualExamBy
-        ? `Inspected by ${toDisplayName(record.visualExamBy)}${record.visualExamAt ? ` on ${formatDate(record.visualExamAt)}` : ""}`
+        ? `Inspected by ${
+            record.visualExamBy && typeof record.visualExamBy === "object"
+              ? `${record.visualExamBy.fullName}${record.visualExamBy.title ? ` (${record.visualExamBy.title})` : ""}`
+              : toDisplayName(record.visualExamBy)
+          }${record.visualExamAt ? ` on ${formatDate(record.visualExamAt)}` : ""}`
         : "Pending inspection",
       completed: !!record.visualExamBy,
       icon: ClipboardCheck,
@@ -178,7 +182,11 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
     {
       label: "QC Review",
       description: record.qcReviewedBy
-        ? `${dispositionLabel(record.qcDisposition ?? "")} by ${toDisplayName(record.qcReviewedBy)}${record.qcReviewedAt ? ` on ${formatDate(record.qcReviewedAt)}` : ""}`
+        ? `${dispositionLabel(record.qcDisposition ?? "")} by ${
+            record.qcReviewedBy && typeof record.qcReviewedBy === "object"
+              ? `${record.qcReviewedBy.fullName}${record.qcReviewedBy.title ? ` (${record.qcReviewedBy.title})` : ""}`
+              : toDisplayName(record.qcReviewedBy)
+          }${record.qcReviewedAt ? ` on ${formatDate(record.qcReviewedAt)}` : ""}`
         : record.status === "PENDING_QC"
         ? "Awaiting QC review"
         : "Not yet submitted",
@@ -489,7 +497,6 @@ function ReceivingDetail({
   const [labelsMatch, setLabelsMatch] = useState(record.labelsMatch === "true");
   const [invoiceMatch, setInvoiceMatch] = useState(record.invoiceMatchesPo === "true");
   const [examNotes, setExamNotes] = useState(record.visualExamNotes ?? "");
-  const [examBy, setExamBy] = useState(toDisplayName(record.visualExamBy));
 
   // QC review form state
   const [qcDisposition, setQcDisposition] = useState<string>("");
@@ -504,7 +511,6 @@ function ReceivingDetail({
     setLabelsMatch(record.labelsMatch === "true");
     setInvoiceMatch(record.invoiceMatchesPo === "true");
     setExamNotes(record.visualExamNotes ?? "");
-    setExamBy(toDisplayName(record.visualExamBy));
     setQcDisposition("");
     setQcNotes("");
   }, [recordId]);
@@ -518,7 +524,6 @@ function ReceivingDetail({
         labelsMatch: labelsMatch ? "true" : "false",
         invoiceMatchesPo: invoiceMatch ? "true" : "false",
         visualExamNotes: examNotes,
-        visualExamBy: examBy,
       });
       return res.json();
     },
@@ -542,7 +547,6 @@ function ReceivingDetail({
         labelsMatch: labelsMatch ? "true" : "false",
         invoiceMatchesPo: invoiceMatch ? "true" : "false",
         visualExamNotes: examNotes,
-        visualExamBy: examBy,
       });
       return res.json();
     },
@@ -593,6 +597,27 @@ function ReceivingDetail({
           </h2>
           {receivingStatusBadge(record.status)}
         </div>
+        {/* Qualification banner */}
+        {record.requiresQualification && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400 mb-3">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>New material — QC qualification required before release to inventory</span>
+          </div>
+        )}
+
+        {/* Workflow type badge */}
+        {record.qcWorkflowType && (
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs text-muted-foreground">QC Workflow:</span>
+            <Badge variant="secondary" className="text-xs">
+              {record.qcWorkflowType === "FULL_LAB_TEST" && "Full Lab Test"}
+              {record.qcWorkflowType === "IDENTITY_CHECK" && "Identity Check"}
+              {record.qcWorkflowType === "COA_REVIEW" && "COA Review"}
+              {record.qcWorkflowType === "EXEMPT" && "Exempt"}
+            </Badge>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
           <div>
             <span className="text-muted-foreground">Lot Number:</span>{" "}
@@ -709,26 +734,13 @@ function ReceivingDetail({
               data-testid="textarea-exam-notes"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="exam-by" className="text-sm">Visual Exam By</Label>
-            <Input
-              id="exam-by"
-              placeholder="Inspector name"
-              value={examBy}
-              onChange={(e) => setExamBy(e.target.value)}
-              disabled={!isQuarantined}
-              className="text-sm"
-              data-testid="input-exam-by"
-            />
-          </div>
-
           {isQuarantined && (
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => saveInspection.mutate()}
-                disabled={saveInspection.isPending || !examBy.trim()}
+                disabled={saveInspection.isPending}
                 data-testid="button-save-inspection"
               >
                 {saveInspection.isPending ? (
@@ -741,7 +753,7 @@ function ReceivingDetail({
               <Button
                 size="sm"
                 onClick={() => submitForQc.mutate()}
-                disabled={submitForQc.isPending || !examBy.trim()}
+                disabled={submitForQc.isPending}
                 data-testid="button-submit-qc"
               >
                 {submitForQc.isPending ? (
@@ -784,7 +796,11 @@ function ReceivingDetail({
                 </div>
                 <div className="text-sm">
                   <span className="text-muted-foreground">Reviewed By:</span>{" "}
-                  <span data-testid="text-qc-reviewer">{toDisplayName(record.qcReviewedBy) || "—"}</span>
+                  <span data-testid="text-qc-reviewer">
+                    {record.qcReviewedBy && typeof record.qcReviewedBy === "object"
+                      ? `${record.qcReviewedBy.fullName}${record.qcReviewedBy.title ? ` · ${record.qcReviewedBy.title}` : ""}`
+                      : toDisplayName(record.qcReviewedBy) || "—"}
+                  </span>
                 </div>
                 {record.qcReviewedAt && (
                   <div className="text-sm">
