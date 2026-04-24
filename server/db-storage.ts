@@ -1423,7 +1423,7 @@ export class DatabaseStorage implements IStorage {
       const [updated] = await tx.update(schema.receivingRecords).set({
         status: newStatus,
         qcDisposition: disposition,
-        qcReviewedBy: reviewerName,
+        qcReviewedBy: { userId: reviewedByUserId, fullName: reviewerName, title: null },
         qcReviewedAt: new Date(),
         qcNotes: notes ?? existing.qcNotes,
         updatedAt: new Date(),

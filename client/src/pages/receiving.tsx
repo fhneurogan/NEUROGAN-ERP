@@ -43,6 +43,15 @@ import type {
   PurchaseOrderWithDetails,
 } from "@shared/schema";
 
+// ── Identity snapshot helper ──
+// visualExamBy and qcReviewedBy are stored as jsonb { userId, fullName, title }
+// but may be legacy strings in old rows — handle both gracefully.
+function toDisplayName(val: { fullName: string } | string | null | undefined): string {
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  return val.fullName;
+}
+
 // ── Status badge ──
 
 function receivingStatusBadge(status: string) {
@@ -161,7 +170,7 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
     {
       label: "Visual Inspection",
       description: record.visualExamBy
-        ? `Inspected by ${record.visualExamBy}${record.visualExamAt ? ` on ${formatDate(record.visualExamAt)}` : ""}`
+        ? `Inspected by ${toDisplayName(record.visualExamBy)}${record.visualExamAt ? ` on ${formatDate(record.visualExamAt)}` : ""}`
         : "Pending inspection",
       completed: !!record.visualExamBy,
       icon: ClipboardCheck,
@@ -169,7 +178,7 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
     {
       label: "QC Review",
       description: record.qcReviewedBy
-        ? `${dispositionLabel(record.qcDisposition ?? "")} by ${record.qcReviewedBy}${record.qcReviewedAt ? ` on ${formatDate(record.qcReviewedAt)}` : ""}`
+        ? `${dispositionLabel(record.qcDisposition ?? "")} by ${toDisplayName(record.qcReviewedBy)}${record.qcReviewedAt ? ` on ${formatDate(record.qcReviewedAt)}` : ""}`
         : record.status === "PENDING_QC"
         ? "Awaiting QC review"
         : "Not yet submitted",
@@ -480,7 +489,7 @@ function ReceivingDetail({
   const [labelsMatch, setLabelsMatch] = useState(record.labelsMatch === "true");
   const [invoiceMatch, setInvoiceMatch] = useState(record.invoiceMatchesPo === "true");
   const [examNotes, setExamNotes] = useState(record.visualExamNotes ?? "");
-  const [examBy, setExamBy] = useState(record.visualExamBy ?? "");
+  const [examBy, setExamBy] = useState(toDisplayName(record.visualExamBy));
 
   // QC review form state
   const [qcDisposition, setQcDisposition] = useState<string>("");
@@ -495,7 +504,7 @@ function ReceivingDetail({
     setLabelsMatch(record.labelsMatch === "true");
     setInvoiceMatch(record.invoiceMatchesPo === "true");
     setExamNotes(record.visualExamNotes ?? "");
-    setExamBy(record.visualExamBy ?? "");
+    setExamBy(toDisplayName(record.visualExamBy));
     setQcDisposition("");
     setQcNotes("");
   }, [recordId]);
@@ -775,7 +784,7 @@ function ReceivingDetail({
                 </div>
                 <div className="text-sm">
                   <span className="text-muted-foreground">Reviewed By:</span>{" "}
-                  <span data-testid="text-qc-reviewer">{record.qcReviewedBy ?? "—"}</span>
+                  <span data-testid="text-qc-reviewer">{toDisplayName(record.qcReviewedBy) || "—"}</span>
                 </div>
                 {record.qcReviewedAt && (
                   <div className="text-sm">
