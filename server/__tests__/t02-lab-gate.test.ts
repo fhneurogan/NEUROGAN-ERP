@@ -137,6 +137,13 @@ describeIfDb("T02 — lab accreditation gate on qcReviewReceivingRecord", () => 
     ).rejects.toMatchObject({ status: 422 });
   });
 
+  it("rejects APPROVED disposition when COA lab is DISQUALIFIED (422)", async () => {
+    const { record } = await seedLotAndCoa(labDisqualified);
+    await expect(
+      storage.qcReviewReceivingRecord(record.id, "APPROVED", adminId),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
   it("approves when COA lab is ACTIVE", async () => {
     const { record } = await seedLotAndCoa(labActive);
     const result = await storage.qcReviewReceivingRecord(record.id, "APPROVED", adminId);
