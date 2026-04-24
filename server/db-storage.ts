@@ -2341,7 +2341,7 @@ export class DatabaseStorage implements IStorage {
     // in QUARANTINED/SAMPLING + PENDING_QC; WAREHOUSE queries IDENTITY_CHECK/QUARANTINED + REJECTED.
     // These are disjoint by qcWorkflowType/status combinations under current state machine rules.
     const isQa = roles.includes("QA") || roles.includes("ADMIN");
-    const isReceiving = roles.includes("WAREHOUSE") || roles.includes("ADMIN");
+    const isWarehouse = roles.includes("WAREHOUSE") || roles.includes("ADMIN");
 
     const baseSelect = {
       id: schema.receivingRecords.id,
@@ -2409,7 +2409,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    if (isReceiving) {
+    if (isWarehouse) {
       const identityCheckRows = await db
         .select(baseSelect)
         .from(schema.receivingRecords)
