@@ -47,10 +47,9 @@ export function LabsSettings() {
   });
 
   const patchMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { status?: Lab["status"]; name?: string; address?: string | null; type?: Lab["type"] } }) => {
-      setPatchingId(id);
-      return apiRequest("PATCH", `/api/labs/${id}`, data);
-    },
+    mutationFn: ({ id, data }: { id: string; data: { status?: Lab["status"]; name?: string; address?: string | null; type?: Lab["type"] } }) =>
+      apiRequest("PATCH", `/api/labs/${id}`, data),
+    onMutate: ({ id }) => { setPatchingId(id); },
     onSettled: () => setPatchingId(null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/labs"] });
@@ -80,7 +79,6 @@ export function LabsSettings() {
                 <Badge variant={lab.type === "IN_HOUSE" ? "default" : "secondary"} className="text-[10px]">
                   {lab.type === "IN_HOUSE" ? "In-House" : "Third Party"}
                 </Badge>
-                {statusBadge(lab.status)}
               </div>
               {lab.address && <div className="text-xs text-muted-foreground mt-0.5">{lab.address}</div>}
             </div>

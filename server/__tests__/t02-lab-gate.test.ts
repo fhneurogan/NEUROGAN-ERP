@@ -149,4 +149,46 @@ describeIfDb("T02 — lab accreditation gate on qcReviewReceivingRecord", () => 
     const result = await storage.qcReviewReceivingRecord(record.id, "APPROVED", adminId);
     expect(result?.status).toBe("APPROVED");
   });
+
+  it("rejects APPROVED_WITH_CONDITIONS disposition when COA lab is INACTIVE (422)", async () => {
+    const { record } = await seedLotAndCoa(labInactive);
+    await expect(
+      storage.qcReviewReceivingRecord(record.id, "APPROVED_WITH_CONDITIONS", adminId),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("rejects APPROVED when lot has supplier COA (no labId) plus a DISQUALIFIED-lab COA", async () => {
+    const { record, lot } = await seedLotAndCoa(labDisqualified);
+    // Add a second COA from a supplier (no labId)
+    await db.insert(schema.coaDocuments).values({
+      lotId: lot.id,
+      sourceType: "SUPPLIER",
+      overallResult: "PASS",
+    });
+    await expect(
+      storage.qcReviewReceivingRecord(record.id, "APPROVED", adminId),
+    ).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("accepts COA with no labId (supplier COA) without lab check", async () => {
+    // Insert a COA with no labId
+    const [product] = await db.select().from(schema.products).limit(1);
+    const [lot] = await db.insert(schema.lots).values({
+      productId: product!.id, lotNumber: `T02-SUPPLIER-${Date.now()}`, supplierName: "Test", quarantineStatus: "PENDING_QC"
+    }).returning();
+    const [supplier] = await db.select().from(schema.suppliers).limit(1);
+    const [record] = await db.insert(schema.receivingRecords).values({
+      lotId: lot!.id, supplierId: supplier?.id ?? null,
+      uniqueIdentifier: `T02-SUP-${Date.now()}`, status: "PENDING_QC",
+      qcWorkflowType: "FULL_LAB_TEST", requiresQualification: false,
+      dateReceived: "2026-04-24", quantityReceived: "10", uom: "kg",
+    }).returning();
+    await db.insert(schema.coaDocuments).values({
+      lotId: lot!.id, receivingRecordId: record!.id,
+      sourceType: "SUPPLIER", overallResult: "PASS",
+      // labId intentionally omitted
+    });
+    const result = await storage.qcReviewReceivingRecord(record!.id, "APPROVED", adminId);
+    expect(result?.status).toBe("APPROVED");
+  });
 });

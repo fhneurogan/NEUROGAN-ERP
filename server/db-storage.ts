@@ -1591,27 +1591,29 @@ export class DatabaseStorage implements IStorage {
         disposition === "APPROVED" || disposition === "APPROVED_WITH_CONDITIONS" ? "APPROVED" : "REJECTED";
       assertValidTransition("receiving_record", existing.status, newStatus);
 
-      // Gate 3: require at least one COA before APPROVED; that COA's lab must be ACTIVE
+      // Gate 3: require at least one COA; reject if any lab-linked COA references a non-ACTIVE lab
       if (newStatus === "APPROVED") {
-        const [coa] = await tx
+        const coas = await tx
           .select({ id: schema.coaDocuments.id, labId: schema.coaDocuments.labId })
           .from(schema.coaDocuments)
-          .where(eq(schema.coaDocuments.lotId, existing.lotId))
-          .limit(1);
-        if (!coa) {
+          .where(eq(schema.coaDocuments.lotId, existing.lotId));
+        if (coas.length === 0) {
           throw Object.assign(
             new Error("Cannot approve: no COA document is linked to this lot. Attach a COA before approving."),
             { status: 422 },
           );
         }
-        if (coa.labId) {
+        for (const coa of coas) {
+          // Supplier COAs (labId = null) are not required to reference the lab registry.
+          // Lab-linked COAs must come from an ACTIVE lab.
+          if (!coa.labId) continue; // supplier COA — no lab registry entry required
           const [lab] = await tx
             .select({ status: schema.labs.status })
             .from(schema.labs)
             .where(eq(schema.labs.id, coa.labId));
           if (lab && lab.status !== "ACTIVE") {
             throw Object.assign(
-              new Error(`Cannot approve: the COA is linked to a lab with status "${lab.status}". Only ACTIVE labs are accepted.`),
+              new Error(`Cannot approve: a COA on this lot is linked to a lab with status "${lab.status}". Update the lab status in Settings or remove the COA before approving.`),
               { status: 422 },
             );
           }
@@ -1732,6 +1734,8 @@ export class DatabaseStorage implements IStorage {
       if (!existing) return undefined;
 
       // Gate: lab must be ACTIVE to accept a COA
+      // Supplier COAs (labId = null) are accepted without lab-status check.
+      // Only COAs explicitly linked to a lab registry entry enforce the ACTIVE requirement.
       if (accepted && existing.labId) {
         const [lab] = await tx
           .select({ status: schema.labs.status })
