@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { db } from "../db";
 import * as schema from "../../shared/schema";
-import { storage } from "../db-storage";
+import { storage } from "../storage";
 import { hashPassword } from "../auth/password";
 import { inArray } from "drizzle-orm";
 
