@@ -19,6 +19,7 @@ import {
   insertBprSchema,
   insertBprStepSchema,
   insertBprDeviationSchema,
+  insertLabSchema,
   userRoleEnum,
   userStatusEnum,
   type UserResponse,
@@ -1385,6 +1386,38 @@ export async function registerRoutes(
       if (err instanceof ZodError) return res.status(400).json({ message: formatZodError(err) });
       const msg = err instanceof Error ? err.message : "Failed to add BPR deviation";
       res.status(400).json({ message: msg });
+    }
+  });
+
+  // ── Labs registry ──────────────────────────────────────────────────────────
+
+  app.get("/api/labs", requireAuth, requireRole("QA", "ADMIN"), async (_req, res, next) => {
+    try {
+      const labs = await storage.listLabs();
+      res.json(labs);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.post("/api/labs", requireAuth, requireRole("QA", "ADMIN"), async (req, res, next) => {
+    try {
+      const data = insertLabSchema.parse(req.body);
+      const lab = await storage.createLab(data);
+      res.status(201).json(lab);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.patch<{ id: string }>("/api/labs/:id", requireAuth, requireRole("QA", "ADMIN"), async (req, res, next) => {
+    try {
+      const data = insertLabSchema.partial().parse(req.body);
+      const lab = await storage.updateLab(req.params.id, data);
+      if (!lab) return res.status(404).json({ message: "Lab not found" });
+      res.json(lab);
+    } catch (err) {
+      next(err);
     }
   });
 

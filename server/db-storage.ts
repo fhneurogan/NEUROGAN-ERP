@@ -31,6 +31,7 @@ import {
   type BatchProductionRecord, type InsertBpr, type BprStep, type InsertBprStep,
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
   type User, type UserResponse, type UserRole, type UserStatus,
+  type Lab, type InsertLab,
 } from "@shared/schema";
 import type {
   IStorage,
@@ -2019,5 +2020,25 @@ export class DatabaseStorage implements IStorage {
         ),
       )
       .orderBy(schema.electronicSignatures.signedAt);
+  }
+
+  // ─── Labs registry (R-01) ───────────────────────────────────────────────
+
+  async listLabs(): Promise<Lab[]> {
+    return db.select().from(schema.labs).orderBy(schema.labs.name);
+  }
+
+  async createLab(data: InsertLab): Promise<Lab> {
+    const [lab] = await db.insert(schema.labs).values(data).returning();
+    return lab!;
+  }
+
+  async updateLab(id: string, data: Partial<InsertLab>): Promise<Lab | undefined> {
+    const [lab] = await db
+      .update(schema.labs)
+      .set(data)
+      .where(eq(schema.labs.id, id))
+      .returning();
+    return lab;
   }
 }

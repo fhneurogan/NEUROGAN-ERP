@@ -30,6 +30,7 @@ import {
   type User, type UserResponse, type UserRole, type UserStatus,
   type AuditRow,
   type SignatureRow,
+  type Lab, type InsertLab,
 } from "@shared/schema";
 import type { Tx } from "./db";
 
@@ -329,6 +330,11 @@ export interface IStorage {
 
   // ─── Electronic signatures (F-04) ─────────────────────────
   listSignatures(entityType: string, entityId: string): Promise<SignatureRow[]>;
+
+  // ─── Labs registry (R-01) ──────────────────────────────
+  listLabs(): Promise<Lab[]>;
+  createLab(data: InsertLab): Promise<Lab>;
+  updateLab(id: string, data: Partial<InsertLab>): Promise<Lab | undefined>;
 }
 
 export interface AuditFilters {
