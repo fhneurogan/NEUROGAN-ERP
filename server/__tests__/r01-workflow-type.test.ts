@@ -110,4 +110,26 @@ describeIfDb("R-01 — workflow type determination", () => {
     expect(res.status).toBe(201);
     expect((res.body as any).qcWorkflowType).toBe("EXEMPT");
   });
+
+  it("SUPPORTING_INGREDIENT + unknown supplier → FULL_LAB_TEST + requires_qualification", async () => {
+    const { supplier, lot } = await seedProductAndSupplierAndLot("SUPPORTING_INGREDIENT");
+    const res = await request(app)
+      .post("/api/receiving")
+      .set("x-test-user-id", receivingUserId)
+      .send({ lotId: lot.id, supplierId: supplier.id, uniqueIdentifier: `RCV-TEST-005`, quantityReceived: "10", uom: "kg", dateReceived: "2026-04-23" });
+    expect(res.status).toBe(201);
+    expect((res.body as any).qcWorkflowType).toBe("FULL_LAB_TEST");
+    expect((res.body as any).requiresQualification).toBe(true);
+  });
+
+  it("FINISHED_GOOD → COA_REVIEW", async () => {
+    const { supplier, lot } = await seedProductAndSupplierAndLot("FINISHED_GOOD");
+    const res = await request(app)
+      .post("/api/receiving")
+      .set("x-test-user-id", receivingUserId)
+      .send({ lotId: lot.id, supplierId: supplier.id, uniqueIdentifier: `RCV-TEST-006`, quantityReceived: "10", uom: "pcs", dateReceived: "2026-04-23" });
+    expect(res.status).toBe(201);
+    expect((res.body as any).qcWorkflowType).toBe("COA_REVIEW");
+    expect((res.body as any).requiresQualification).toBe(false);
+  });
 });

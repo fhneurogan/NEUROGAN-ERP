@@ -69,7 +69,12 @@ async function deriveWorkflowType(
     .from(schema.products)
     .where(eq(schema.products.id, productId));
 
-  const category = product?.category ?? "ACTIVE_INGREDIENT";
+  if (!product) {
+    const err = new Error(`Cannot derive QC workflow type: product not found for lot. Check that the lot has a valid productId.`);
+    (err as any).status = 422;
+    throw err;
+  }
+  const category = product.category;
 
   if (category === "SECONDARY_PACKAGING") {
     return { qcWorkflowType: "EXEMPT", requiresQualification: false };
