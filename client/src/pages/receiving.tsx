@@ -52,6 +52,14 @@ function toDisplayName(val: { fullName: string } | string | null | undefined): s
   return val.fullName;
 }
 
+// ── QC workflow type labels ──
+const WORKFLOW_LABELS: Record<string, string> = {
+  FULL_LAB_TEST: "Full Lab Test",
+  IDENTITY_CHECK: "Identity Check",
+  COA_REVIEW: "COA Review",
+  EXEMPT: "Exempt",
+};
+
 // ── Status badge ──
 
 function receivingStatusBadge(status: string) {
@@ -171,7 +179,7 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
       label: "Visual Inspection",
       description: record.visualExamBy
         ? `Inspected by ${
-            record.visualExamBy && typeof record.visualExamBy === "object"
+            typeof record.visualExamBy === "object"
               ? `${record.visualExamBy.fullName}${record.visualExamBy.title ? ` (${record.visualExamBy.title})` : ""}`
               : toDisplayName(record.visualExamBy)
           }${record.visualExamAt ? ` on ${formatDate(record.visualExamAt)}` : ""}`
@@ -183,7 +191,7 @@ function StatusTimeline({ record }: { record: ReceivingRecordWithDetails }) {
       label: "QC Review",
       description: record.qcReviewedBy
         ? `${dispositionLabel(record.qcDisposition ?? "")} by ${
-            record.qcReviewedBy && typeof record.qcReviewedBy === "object"
+            typeof record.qcReviewedBy === "object"
               ? `${record.qcReviewedBy.fullName}${record.qcReviewedBy.title ? ` (${record.qcReviewedBy.title})` : ""}`
               : toDisplayName(record.qcReviewedBy)
           }${record.qcReviewedAt ? ` on ${formatDate(record.qcReviewedAt)}` : ""}`
@@ -597,26 +605,24 @@ function ReceivingDetail({
           </h2>
           {receivingStatusBadge(record.status)}
         </div>
-        {/* Qualification banner */}
-        {record.requiresQualification && (
-          <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400 mb-3">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>New material — QC qualification required before release to inventory</span>
-          </div>
-        )}
-
-        {/* Workflow type badge */}
-        {record.qcWorkflowType && (
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-muted-foreground">QC Workflow:</span>
-            <Badge variant="secondary" className="text-xs">
-              {record.qcWorkflowType === "FULL_LAB_TEST" && "Full Lab Test"}
-              {record.qcWorkflowType === "IDENTITY_CHECK" && "Identity Check"}
-              {record.qcWorkflowType === "COA_REVIEW" && "COA Review"}
-              {record.qcWorkflowType === "EXEMPT" && "Exempt"}
-            </Badge>
-          </div>
-        )}
+        <div className="space-y-2 mb-3">
+          {/* Qualification banner */}
+          {record.requiresQualification && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>New material — QC qualification required before release to inventory</span>
+            </div>
+          )}
+          {/* Workflow type badge */}
+          {record.qcWorkflowType && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">QC Workflow:</span>
+              <Badge variant="secondary" className="text-xs">
+                {WORKFLOW_LABELS[record.qcWorkflowType] ?? record.qcWorkflowType}
+              </Badge>
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
           <div>
@@ -765,12 +771,15 @@ function ReceivingDetail({
               </Button>
             </div>
           )}
-          {record.visualExamBy && typeof record.visualExamBy === "object" && (
-            <p className="text-sm text-muted-foreground" data-testid="text-visual-exam-by">
-              Inspected by {(record.visualExamBy as any).fullName}
-              {(record.visualExamBy as any).title ? ` (${(record.visualExamBy as any).title})` : ""}
-            </p>
-          )}
+          {(() => {
+            const snap = record.visualExamBy;
+            if (!snap || typeof snap !== "object") return null;
+            return (
+              <p className="text-sm text-muted-foreground" data-testid="text-visual-exam-by">
+                Inspected by {snap.fullName}{snap.title ? ` (${snap.title})` : ""}
+              </p>
+            );
+          })()}
         </div>
       </div>
 
