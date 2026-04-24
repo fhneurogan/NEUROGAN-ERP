@@ -71,9 +71,10 @@ function assertVisualInspectionComplete(record: {
   if (record.labelsMatch !== "true") missing.push("labelsMatch");
   if (record.invoiceMatchesPo !== "true") missing.push("invoiceMatchesPo");
   if (missing.length > 0) {
-    const err = new Error(`Visual inspection incomplete. Required fields missing or not confirmed: ${missing.join(", ")}.`);
-    (err as any).status = 422;
-    throw err;
+    throw Object.assign(
+      new Error(`Visual inspection incomplete. Required fields missing or not confirmed: ${missing.join(", ")}.`),
+      { status: 422 },
+    );
   }
 }
 
@@ -91,9 +92,10 @@ async function deriveWorkflowType(
     .where(eq(schema.products.id, productId));
 
   if (!product) {
-    const err = new Error(`Cannot derive QC workflow type: product not found for lot. Check that the lot has a valid productId.`);
-    (err as any).status = 422;
-    throw err;
+    throw Object.assign(
+      new Error(`Cannot derive QC workflow type: product not found for lot. Check that the lot has a valid productId.`),
+      { status: 422 },
+    );
   }
   const category = product.category;
 
@@ -1527,7 +1529,7 @@ export class DatabaseStorage implements IStorage {
         existing.status === "QUARANTINED" &&
         existing.qcWorkflowType === "FULL_LAB_TEST"
       ) {
-        assertVisualInspectionComplete(merged as any);
+        assertVisualInspectionComplete(merged);
       }
 
       // Gate 2: QUARANTINED → PENDING_QC requires complete visual inspection (IDENTITY_CHECK / COA_REVIEW)
@@ -1536,7 +1538,7 @@ export class DatabaseStorage implements IStorage {
         existing.status === "QUARANTINED" &&
         (existing.qcWorkflowType === "IDENTITY_CHECK" || existing.qcWorkflowType === "COA_REVIEW")
       ) {
-        assertVisualInspectionComplete(merged as any);
+        assertVisualInspectionComplete(merged);
       }
 
       // F-06: Auto-set visualExamBy snapshot when visual inspection fields are being submitted
@@ -1597,9 +1599,10 @@ export class DatabaseStorage implements IStorage {
           .where(eq(schema.coaDocuments.lotId, existing.lotId))
           .limit(1);
         if (!coa) {
-          const err = new Error("Cannot approve: no COA document is linked to this lot. Attach a COA before approving.");
-          (err as any).status = 422;
-          throw err;
+          throw Object.assign(
+            new Error("Cannot approve: no COA document is linked to this lot. Attach a COA before approving."),
+            { status: 422 },
+          );
         }
       }
 

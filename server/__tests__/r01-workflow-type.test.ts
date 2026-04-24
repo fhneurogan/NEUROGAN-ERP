@@ -6,14 +6,14 @@ import { storage } from "../storage";
 import { hashPassword } from "../auth/password";
 import { db } from "../db";
 import * as schema from "@shared/schema";
-import { eq } from "drizzle-orm";
+import type { UserRole } from "@shared/schema";
 
 const dbUrl = process.env.DATABASE_URL;
 const describeIfDb = dbUrl ? describe : describe.skip;
 
 async function seedUser(email: string, roles: string[], createdById: string | null) {
   const hash = await hashPassword("Neurogan1!Secure");
-  return storage.createUser({ email, fullName: "Test", title: null, passwordHash: hash, roles: roles as any, createdByUserId: createdById, grantedByUserId: createdById });
+  return storage.createUser({ email, fullName: "Test", title: null, passwordHash: hash, roles: roles as UserRole[], createdByUserId: createdById, grantedByUserId: createdById });
 }
 
 async function cleanDb() {
@@ -73,8 +73,8 @@ describeIfDb("R-01 — workflow type determination", () => {
       .set("x-test-user-id", receivingUserId)
       .send({ lotId: lot.id, supplierId: supplier.id, productId: product.id, uniqueIdentifier: `RCV-TEST-001`, quantityReceived: "10", uom: "kg", dateReceived: "2026-04-23" });
     expect(res.status).toBe(201);
-    expect((res.body as any).qcWorkflowType).toBe("FULL_LAB_TEST");
-    expect((res.body as any).requiresQualification).toBe(true);
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).qcWorkflowType).toBe("FULL_LAB_TEST");
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).requiresQualification).toBe(true);
   });
 
   it("ACTIVE_INGREDIENT + approved supplier → IDENTITY_CHECK + no qualification", async () => {
@@ -86,8 +86,8 @@ describeIfDb("R-01 — workflow type determination", () => {
       .set("x-test-user-id", receivingUserId)
       .send({ lotId: lot.id, supplierId: supplier.id, productId: product.id, uniqueIdentifier: `RCV-TEST-002`, quantityReceived: "10", uom: "kg", dateReceived: "2026-04-23" });
     expect(res.status).toBe(201);
-    expect((res.body as any).qcWorkflowType).toBe("IDENTITY_CHECK");
-    expect((res.body as any).requiresQualification).toBe(false);
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).qcWorkflowType).toBe("IDENTITY_CHECK");
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).requiresQualification).toBe(false);
   });
 
   it("PRIMARY_PACKAGING → COA_REVIEW regardless of supplier", async () => {
@@ -97,8 +97,8 @@ describeIfDb("R-01 — workflow type determination", () => {
       .set("x-test-user-id", receivingUserId)
       .send({ lotId: lot.id, supplierId: supplier.id, uniqueIdentifier: `RCV-TEST-003`, quantityReceived: "100", uom: "pcs", dateReceived: "2026-04-23" });
     expect(res.status).toBe(201);
-    expect((res.body as any).qcWorkflowType).toBe("COA_REVIEW");
-    expect((res.body as any).requiresQualification).toBe(false);
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).qcWorkflowType).toBe("COA_REVIEW");
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).requiresQualification).toBe(false);
   });
 
   it("SECONDARY_PACKAGING → EXEMPT", async () => {
@@ -108,7 +108,7 @@ describeIfDb("R-01 — workflow type determination", () => {
       .set("x-test-user-id", receivingUserId)
       .send({ lotId: lot.id, supplierId: supplier.id, uniqueIdentifier: `RCV-TEST-004`, quantityReceived: "50", uom: "pcs", dateReceived: "2026-04-23" });
     expect(res.status).toBe(201);
-    expect((res.body as any).qcWorkflowType).toBe("EXEMPT");
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).qcWorkflowType).toBe("EXEMPT");
   });
 
   it("SUPPORTING_INGREDIENT + unknown supplier → FULL_LAB_TEST + requires_qualification", async () => {
@@ -118,8 +118,8 @@ describeIfDb("R-01 — workflow type determination", () => {
       .set("x-test-user-id", receivingUserId)
       .send({ lotId: lot.id, supplierId: supplier.id, uniqueIdentifier: `RCV-TEST-005`, quantityReceived: "10", uom: "kg", dateReceived: "2026-04-23" });
     expect(res.status).toBe(201);
-    expect((res.body as any).qcWorkflowType).toBe("FULL_LAB_TEST");
-    expect((res.body as any).requiresQualification).toBe(true);
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).qcWorkflowType).toBe("FULL_LAB_TEST");
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).requiresQualification).toBe(true);
   });
 
   it("FINISHED_GOOD → COA_REVIEW", async () => {
@@ -129,7 +129,7 @@ describeIfDb("R-01 — workflow type determination", () => {
       .set("x-test-user-id", receivingUserId)
       .send({ lotId: lot.id, supplierId: supplier.id, uniqueIdentifier: `RCV-TEST-006`, quantityReceived: "10", uom: "pcs", dateReceived: "2026-04-23" });
     expect(res.status).toBe(201);
-    expect((res.body as any).qcWorkflowType).toBe("COA_REVIEW");
-    expect((res.body as any).requiresQualification).toBe(false);
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).qcWorkflowType).toBe("COA_REVIEW");
+    expect((res.body as { qcWorkflowType: string; requiresQualification: boolean }).requiresQualification).toBe(false);
   });
 });

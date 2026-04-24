@@ -77,7 +77,7 @@ describeIfDb("R-01 — tasks endpoint", () => {
 
     const res = await request(app).get("/api/tasks").set("x-test-user-id", qaId);
     expect(res.status).toBe(200);
-    const tasks = res.body as any[];
+    const tasks = res.body as Array<{ taskType: string }>;
     expect(tasks.some((t) => t.taskType === "LAB_TEST_REQUIRED" || t.taskType === "QUALIFICATION_REQUIRED")).toBe(true);
     expect(tasks.some((t) => t.taskType === "PENDING_QC")).toBe(true);
   });
@@ -87,7 +87,7 @@ describeIfDb("R-01 — tasks endpoint", () => {
 
     const res = await request(app).get("/api/tasks").set("x-test-user-id", receivingId);
     expect(res.status).toBe(200);
-    const tasks = res.body as any[];
+    const tasks = res.body as Array<{ taskType: string }>;
     expect(tasks.some((t) => t.taskType === "IDENTITY_CHECK_REQUIRED")).toBe(true);
   });
 
@@ -95,6 +95,6 @@ describeIfDb("R-01 — tasks endpoint", () => {
     await seedReceivingRecord({ status: "QUARANTINED", qcWorkflowType: "FULL_LAB_TEST" });
     const res = await request(app).get("/api/tasks").set("x-test-user-id", productionId);
     expect(res.status).toBe(200);
-    expect((res.body as any[]).length).toBe(0);
+    expect((res.body as unknown[]).length).toBe(0);
   });
 });

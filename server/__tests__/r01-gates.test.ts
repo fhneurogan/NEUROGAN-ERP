@@ -60,7 +60,7 @@ describeIfDb("R-01 — state machine gates", () => {
       .set("x-test-user-id", adminId)
       .send({ status: "SAMPLING" });
     expect(res.status).toBe(422);
-    expect((res.body as any).message).toMatch(/visual inspection/i);
+    expect((res.body as { message: string }).message).toMatch(/visual inspection/i);
   });
 
   it("Gate 1: QUARANTINED→SAMPLING allowed when visual inspection complete", async () => {
@@ -77,7 +77,7 @@ describeIfDb("R-01 — state machine gates", () => {
         visualExamAt: new Date().toISOString(),
       });
     expect(res.status).toBe(200);
-    const body = res.body as any;
+    const body = res.body as { visualExamBy: { userId: string; fullName: string; title: string | null } };
     expect(typeof body.visualExamBy).toBe("object");
     expect(body.visualExamBy.userId).toBe(adminId);
   });
@@ -95,7 +95,7 @@ describeIfDb("R-01 — state machine gates", () => {
       .set("x-test-user-id", adminId)
       .send({ status: "PENDING_QC" });
     expect(res.status).toBe(422);
-    expect((res.body as any).message).toMatch(/visual inspection/i);
+    expect((res.body as { message: string }).message).toMatch(/visual inspection/i);
   });
 
   it("Gate 3: PENDING_QC→APPROVED rejected (422) when no COA linked", async () => {
@@ -107,7 +107,7 @@ describeIfDb("R-01 — state machine gates", () => {
       .set("x-test-user-id", qaId)
       .send({ disposition: "APPROVED", notes: "Looks good", password: "Neurogan1!Secure" });
     expect(res.status).toBe(422);
-    expect((res.body as any).message).toMatch(/COA/i);
+    expect((res.body as { message: string }).message).toMatch(/COA/i);
   });
 
   it("Gate 3 side-effect: approval of requires_qualification lot creates approved_materials entry", async () => {
@@ -142,9 +142,10 @@ describeIfDb("R-01 — state machine gates", () => {
       .send({ disposition: "APPROVED", notes: "", password: "Neurogan1!Secure" });
 
     const [updated] = await db.select().from(schema.receivingRecords).where(eq(schema.receivingRecords.id, record.id));
-    expect(typeof updated!.qcReviewedBy).toBe("object");
-    expect((updated!.qcReviewedBy as any).userId).toBe(qaId);
-    expect((updated!.qcReviewedBy as any).fullName).toBe("QA User");
-    expect((updated!.qcReviewedBy as any).title).toBe("QC Manager");
+    const snapshot = updated!.qcReviewedBy as { userId: string; fullName: string; title: string };
+    expect(typeof snapshot).toBe("object");
+    expect(snapshot.userId).toBe(qaId);
+    expect(snapshot.fullName).toBe("QA User");
+    expect(snapshot.title).toBe("QC Manager");
   });
 });
