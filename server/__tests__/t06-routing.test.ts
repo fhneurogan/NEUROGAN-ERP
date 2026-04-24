@@ -40,7 +40,7 @@ afterAll(async () => {
   if (!dbUrl) return;
   // Clean up in dependency order
   for (const id of seededTransactionIds) {
-    await db.delete(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.id, id));
+    await db.delete(schema.transactions).where(eq(schema.transactions.id, id));
   }
   for (const id of seededRecordIds) {
     await db.delete(schema.receivingRecords).where(eq(schema.receivingRecords.id, id));
@@ -94,7 +94,7 @@ async function seedPOAndLineItem() {
   const [po] = await db.insert(schema.purchaseOrders).values({
     poNumber: `T06-PO-${suffix}`,
     supplierId: supplier!.id,
-    status: "OPEN",
+    status: "DRAFT",
   }).returning();
   seededPOIds.push(po!.id);
 

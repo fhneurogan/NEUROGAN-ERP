@@ -1206,6 +1206,8 @@ export async function registerRoutes(
     requireAuth, requireRole("LAB_TECH", "QA", "ADMIN"), rejectIdentityInBody(["testedByUserId", "coaDocumentId"]),
     async (req, res, next) => {
       try {
+        const coa = await storage.getCoaDocument(req.params.id);
+        if (!coa) return res.status(404).json({ message: "COA document not found" });
         const data = insertLabTestResultSchema.parse(req.body);
         const result = await withAudit(
           { userId: req.user!.id, action: "CREATE", entityType: "lab_test_result",
