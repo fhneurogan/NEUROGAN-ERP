@@ -105,6 +105,7 @@ async function seedLotAndCoa(labId: string) {
     sourceType: "THIRD_PARTY_LAB",
     labId: labId,
     overallResult: "PASS",
+    identityConfirmed: "true",
   }).returning();
   seededCoaIds.push(coa!.id);
 
@@ -189,6 +190,7 @@ describeIfDb("T02 — lab accreditation gate on qcReviewReceivingRecord", () => 
     const [coa] = await db.insert(schema.coaDocuments).values({
       lotId: lot!.id, receivingRecordId: record!.id,
       sourceType: "SUPPLIER", overallResult: "PASS",
+      identityConfirmed: "true",
       // labId intentionally omitted
     }).returning();
     seededCoaIds.push(coa!.id);
