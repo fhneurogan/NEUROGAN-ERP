@@ -2337,11 +2337,11 @@ export class DatabaseStorage implements IStorage {
   async getUserTasks(_userId: string, roles: string[]): Promise<UserTask[]> {
     // _userId reserved for future per-user scoped task types; currently returns all active records for the role.
     const tasks: UserTask[] = [];
-    // ADMIN gets both QA and RECEIVING tasks. No deduplication risk: QA queries FULL_LAB_TEST
-    // in QUARANTINED/SAMPLING + PENDING_QC; RECEIVING queries IDENTITY_CHECK/QUARANTINED + REJECTED.
+    // ADMIN gets both QA and WAREHOUSE tasks. No deduplication risk: QA queries FULL_LAB_TEST
+    // in QUARANTINED/SAMPLING + PENDING_QC; WAREHOUSE queries IDENTITY_CHECK/QUARANTINED + REJECTED.
     // These are disjoint by qcWorkflowType/status combinations under current state machine rules.
     const isQa = roles.includes("QA") || roles.includes("ADMIN");
-    const isReceiving = roles.includes("RECEIVING") || roles.includes("ADMIN");
+    const isReceiving = roles.includes("WAREHOUSE") || roles.includes("ADMIN");
 
     const baseSelect = {
       id: schema.receivingRecords.id,
