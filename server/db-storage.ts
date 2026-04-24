@@ -32,6 +32,7 @@ import {
   type BprDeviation, type InsertBprDeviation, type BprWithDetails,
   type User, type UserResponse, type UserRole, type UserStatus,
   type Lab, type InsertLab,
+  type ApprovedMaterial,
 } from "@shared/schema";
 import type {
   IStorage,
@@ -46,6 +47,7 @@ import type {
   LowStockItem,
   CreateUserInput,
   AuditFilters,
+  ApprovedMaterialWithDetails,
 } from "./storage";
 import { computeRoleDelta } from "./storage/users";
 import { assertNotLocked, assertValidTransition } from "./state/transitions";
@@ -2040,5 +2042,71 @@ export class DatabaseStorage implements IStorage {
       .where(eq(schema.labs.id, id))
       .returning();
     return lab;
+  }
+
+  // ─── Approved materials registry (R-01) ─────────────────────────────────
+
+  async listApprovedMaterials(): Promise<ApprovedMaterialWithDetails[]> {
+    const rows = await db
+      .select({
+        id: schema.approvedMaterials.id,
+        productId: schema.approvedMaterials.productId,
+        productName: schema.products.name,
+        productSku: schema.products.sku,
+        supplierId: schema.approvedMaterials.supplierId,
+        supplierName: schema.suppliers.name,
+        approvedByUserId: schema.approvedMaterials.approvedByUserId,
+        approvedByName: schema.users.fullName,
+        approvedAt: schema.approvedMaterials.approvedAt,
+        notes: schema.approvedMaterials.notes,
+        isActive: schema.approvedMaterials.isActive,
+      })
+      .from(schema.approvedMaterials)
+      .leftJoin(schema.products, eq(schema.approvedMaterials.productId, schema.products.id))
+      .leftJoin(schema.suppliers, eq(schema.approvedMaterials.supplierId, schema.suppliers.id))
+      .leftJoin(schema.users, eq(schema.approvedMaterials.approvedByUserId, schema.users.id))
+      .where(eq(schema.approvedMaterials.isActive, true))
+      .orderBy(schema.products.name);
+    return rows as ApprovedMaterialWithDetails[];
+  }
+
+  async revokeApprovedMaterial(id: string): Promise<void> {
+    await db
+      .update(schema.approvedMaterials)
+      .set({ isActive: false })
+      .where(eq(schema.approvedMaterials.id, id));
+  }
+
+  async isApprovedMaterial(productId: string, supplierId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.approvedMaterials.id })
+      .from(schema.approvedMaterials)
+      .where(
+        and(
+          eq(schema.approvedMaterials.productId, productId),
+          eq(schema.approvedMaterials.supplierId, supplierId),
+          eq(schema.approvedMaterials.isActive, true),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
+  async createApprovedMaterial(
+    productId: string,
+    supplierId: string,
+    approvedByUserId: string,
+    notes?: string,
+    tx?: Tx,
+  ): Promise<ApprovedMaterial> {
+    const [row] = await (tx ?? db)
+      .insert(schema.approvedMaterials)
+      .values({ productId, supplierId, approvedByUserId, notes: notes ?? null })
+      .onConflictDoUpdate({
+        target: [schema.approvedMaterials.productId, schema.approvedMaterials.supplierId],
+        set: { isActive: true, approvedByUserId, approvedAt: new Date(), notes: notes ?? null },
+      })
+      .returning();
+    return row!;
   }
 }

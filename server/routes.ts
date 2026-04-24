@@ -1421,6 +1421,26 @@ export async function registerRoutes(
     }
   });
 
+  // ── Approved materials ──────────────────────────────────────────────────────
+
+  app.get("/api/approved-materials", requireAuth, requireRole("QA", "ADMIN"), async (_req, res, next) => {
+    try {
+      const items = await storage.listApprovedMaterials();
+      res.json(items);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  app.delete<{ id: string }>("/api/approved-materials/:id", requireAuth, requireRole("QA", "ADMIN"), async (req, res, next) => {
+    try {
+      await storage.revokeApprovedMaterial(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // ─── Dashboard ─────────────────────────────────────────
 
   app.get("/api/dashboard", async (_req, res) => {

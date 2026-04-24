@@ -31,8 +31,23 @@ import {
   type AuditRow,
   type SignatureRow,
   type Lab, type InsertLab,
+  type ApprovedMaterial,
 } from "@shared/schema";
 import type { Tx } from "./db";
+
+export interface ApprovedMaterialWithDetails {
+  id: string;
+  productId: string;
+  productName: string | null;
+  productSku: string | null;
+  supplierId: string;
+  supplierName: string | null;
+  approvedByUserId: string;
+  approvedByName: string | null;
+  approvedAt: Date;
+  notes: string | null;
+  isActive: boolean;
+}
 
 // F-01: createUser takes the server-generated passwordHash (see
 // server/auth/password.ts) and the initial role list atomically. The caller
@@ -335,6 +350,12 @@ export interface IStorage {
   listLabs(): Promise<Lab[]>;
   createLab(data: InsertLab): Promise<Lab>;
   updateLab(id: string, data: Partial<InsertLab>): Promise<Lab | undefined>;
+
+  // ─── Approved materials registry (R-01) ────────────────
+  listApprovedMaterials(): Promise<ApprovedMaterialWithDetails[]>;
+  revokeApprovedMaterial(id: string): Promise<void>;
+  isApprovedMaterial(productId: string, supplierId: string): Promise<boolean>;
+  createApprovedMaterial(productId: string, supplierId: string, approvedByUserId: string, notes?: string, tx?: Tx): Promise<ApprovedMaterial>;
 }
 
 export interface AuditFilters {
