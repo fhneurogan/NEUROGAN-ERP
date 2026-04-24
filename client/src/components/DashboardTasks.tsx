@@ -18,12 +18,6 @@ interface UserTask {
   isUrgent: boolean;
 }
 
-async function fetchTasks(): Promise<UserTask[]> {
-  const res = await fetch("/api/tasks", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to load tasks");
-  return res.json();
-}
-
 const TASK_CONFIG: Record<UserTask["taskType"], { label: string; icon: ComponentType<{ className?: string }> }> = {
   LAB_TEST_REQUIRED: { label: "Full lab test required", icon: FlaskConical },
   QUALIFICATION_REQUIRED: { label: "New material — qualification required", icon: AlertTriangle },
@@ -34,9 +28,8 @@ const TASK_CONFIG: Record<UserTask["taskType"], { label: string; icon: Component
 
 export function DashboardTasks() {
   const [, navigate] = useLocation();
-  const { data: tasks = [], isLoading } = useQuery({
-    queryKey: ["dashboard-tasks"],
-    queryFn: fetchTasks,
+  const { data: tasks = [], isLoading } = useQuery<UserTask[]>({
+    queryKey: ["/api/tasks"],
     staleTime: 30_000,
   });
 
@@ -81,7 +74,7 @@ export function DashboardTasks() {
                       {task.materialName ?? "Unknown material"}
                       {task.supplierName ? ` · ${task.supplierName}` : ""}
                       {task.quantityReceived ? ` · ${task.quantityReceived} ${task.uom ?? ""}` : ""}
-                      {task.dateReceived ? ` · ${task.receivingIdentifier}` : ""}
+                      {task.receivingIdentifier ? ` · ${task.receivingIdentifier}` : ""}
                     </div>
                   </div>
                 </button>
