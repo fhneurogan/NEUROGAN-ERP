@@ -1591,10 +1591,10 @@ export class DatabaseStorage implements IStorage {
         disposition === "APPROVED" || disposition === "APPROVED_WITH_CONDITIONS" ? "APPROVED" : "REJECTED";
       assertValidTransition("receiving_record", existing.status, newStatus);
 
-      // Gate 3: require at least one COA before APPROVED
+      // Gate 3: require at least one COA before APPROVED; that COA's lab must be ACTIVE
       if (newStatus === "APPROVED") {
         const [coa] = await tx
-          .select({ id: schema.coaDocuments.id })
+          .select({ id: schema.coaDocuments.id, labId: schema.coaDocuments.labId })
           .from(schema.coaDocuments)
           .where(eq(schema.coaDocuments.lotId, existing.lotId))
           .limit(1);
@@ -1603,6 +1603,18 @@ export class DatabaseStorage implements IStorage {
             new Error("Cannot approve: no COA document is linked to this lot. Attach a COA before approving."),
             { status: 422 },
           );
+        }
+        if (coa.labId) {
+          const [lab] = await tx
+            .select({ status: schema.labs.status })
+            .from(schema.labs)
+            .where(eq(schema.labs.id, coa.labId));
+          if (lab && lab.status !== "ACTIVE") {
+            throw Object.assign(
+              new Error(`Cannot approve: the COA is linked to a lab with status "${lab.status}". Only ACTIVE labs are accepted.`),
+              { status: 422 },
+            );
+          }
         }
       }
 
@@ -1718,6 +1730,20 @@ export class DatabaseStorage implements IStorage {
     const run = async (tx: Tx) => {
       const [existing] = await tx.select().from(schema.coaDocuments).where(eq(schema.coaDocuments.id, id));
       if (!existing) return undefined;
+
+      // Gate: lab must be ACTIVE to accept a COA
+      if (accepted && existing.labId) {
+        const [lab] = await tx
+          .select({ status: schema.labs.status })
+          .from(schema.labs)
+          .where(eq(schema.labs.id, existing.labId));
+        if (lab && lab.status !== "ACTIVE") {
+          throw Object.assign(
+            new Error(`Cannot accept COA: the linked lab has status "${lab.status}". Only ACTIVE labs are accepted.`),
+            { status: 422 },
+          );
+        }
+      }
 
       const reviewer = await tx.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, reviewedByUserId));
       const reviewerName = reviewer[0]?.fullName ?? reviewedByUserId;
