@@ -469,6 +469,9 @@ export class DatabaseStorage implements IStorage {
       // Lot in-progress or approved — attach to existing lot, no new QC work needed.
       // Insert directly (bypassing createReceivingRecord) to force qcWorkflowType=EXEMPT,
       // since createReceivingRecord always re-derives the workflow from the category matrix.
+      // We intentionally do NOT sync lots.quarantineStatus here: for an APPROVED lot we must
+      // not regress it back to QUARANTINED, and for an in-progress lot the new EXEMPT receipt
+      // must not override the active workflow state. The existing lot's status is authoritative.
       const rcvId = await this.getNextReceivingIdentifier();
       await db.insert(schema.receivingRecords).values({
         purchaseOrderId: po.id,

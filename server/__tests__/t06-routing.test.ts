@@ -210,6 +210,56 @@ describeIfDb("T06-A — lot-existence routing in receivePOLineItem", () => {
     for (const r of records) seededRecordIds.push(r.id);
   });
 
+  it("second receipt of in-progress lot (SAMPLING) → attaches to existing lot, EXEMPT workflow", async () => {
+    const { product, supplier, lineItem, location } = await seedPOAndLineItem();
+    const lotNumber = `T06-SAMPLING-${Date.now()}`;
+
+    const [samplingLot] = await db.insert(schema.lots).values({
+      productId: product.id,
+      lotNumber,
+      supplierName: supplier.name,
+      quarantineStatus: "SAMPLING",
+    }).returning();
+    seededLotIds.push(samplingLot!.id);
+
+    const result = await storage.receivePOLineItem(lineItem.id, 5, lotNumber, location.id);
+
+    expect(result.lot.id).toBe(samplingLot!.id);
+    seededTransactionIds.push(result.transaction.id);
+
+    const records = await db
+      .select()
+      .from(schema.receivingRecords)
+      .where(eq(schema.receivingRecords.lotId, samplingLot!.id));
+    expect(records.find(r => r.qcWorkflowType === "EXEMPT")).toBeDefined();
+    for (const r of records) seededRecordIds.push(r.id);
+  });
+
+  it("second receipt of in-progress lot (PENDING_QC) → attaches to existing lot, EXEMPT workflow", async () => {
+    const { product, supplier, lineItem, location } = await seedPOAndLineItem();
+    const lotNumber = `T06-PENDING-${Date.now()}`;
+
+    const [pendingLot] = await db.insert(schema.lots).values({
+      productId: product.id,
+      lotNumber,
+      supplierName: supplier.name,
+      quarantineStatus: "PENDING_QC",
+    }).returning();
+    seededLotIds.push(pendingLot!.id);
+
+    const result = await storage.receivePOLineItem(lineItem.id, 5, lotNumber, location.id);
+
+    expect(result.lot.id).toBe(pendingLot!.id);
+    seededTransactionIds.push(result.transaction.id);
+
+    const records = await db
+      .select()
+      .from(schema.receivingRecords)
+      .where(eq(schema.receivingRecords.lotId, pendingLot!.id));
+    expect(records.find(r => r.qcWorkflowType === "EXEMPT")).toBeDefined();
+    for (const r of records) seededRecordIds.push(r.id);
+  });
+
   it("second receipt of REJECTED lot → throws 422", async () => {
     // Arrange: create a REJECTED lot
     const { product, supplier, lineItem, location } = await seedPOAndLineItem();
