@@ -35,6 +35,24 @@ import {
 } from "@shared/schema";
 import type { Tx } from "./db";
 
+export interface UserTask {
+  id: string; // composite key like "lab-<recordId>"
+  taskType:
+    | "LAB_TEST_REQUIRED"
+    | "QUALIFICATION_REQUIRED"
+    | "PENDING_QC"
+    | "IDENTITY_CHECK_REQUIRED"
+    | "REJECTED_LOT";
+  receivingRecordId: string;
+  receivingIdentifier: string;
+  materialName: string | null;
+  supplierName: string | null;
+  quantityReceived: string | null;
+  uom: string | null;
+  dateReceived: string | null;
+  isUrgent: boolean;
+}
+
 export interface ApprovedMaterialWithDetails {
   id: string;
   productId: string;
@@ -356,6 +374,9 @@ export interface IStorage {
   revokeApprovedMaterial(id: string): Promise<ApprovedMaterial | undefined>;
   isApprovedMaterial(productId: string, supplierId: string): Promise<boolean>;
   createApprovedMaterial(productId: string, supplierId: string, approvedByUserId: string, notes?: string, tx?: Tx): Promise<ApprovedMaterial>;
+
+  // ─── User tasks (R-01) ─────────────────────────────────
+  getUserTasks(userId: string, roles: string[]): Promise<UserTask[]>;
 }
 
 export interface AuditFilters {

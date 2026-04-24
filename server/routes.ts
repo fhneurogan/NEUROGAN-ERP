@@ -1454,6 +1454,17 @@ export async function registerRoutes(
     }
   });
 
+  // ─── User tasks (R-01) ─────────────────────────────────
+
+  app.get("/api/tasks", requireAuth, async (req, res, next) => {
+    try {
+      const tasks = await storage.getUserTasks(req.user!.id, req.user!.roles);
+      res.json(tasks);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // ─── Dashboard ─────────────────────────────────────────
 
   app.get("/api/dashboard", async (_req, res) => {
