@@ -1876,7 +1876,7 @@ export class DatabaseStorage implements IStorage {
           if (latestEvent.nextRequalificationDue && latestEvent.nextRequalificationDue < today) {
             throw Object.assign(
               new Error(
-                `Cannot accept COA: lab "${lab.name}" requalification was due ${latestEvent.nextRequalificationDue}. Requalify the lab before accepting COAs.`,
+                `Cannot accept COA: lab "${lab.name}" requalification is overdue (was due ${latestEvent.nextRequalificationDue}). Requalify the lab before accepting COAs.`,
               ),
               { status: 422 },
             );
