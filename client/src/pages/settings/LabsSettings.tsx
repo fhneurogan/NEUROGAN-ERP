@@ -118,7 +118,7 @@ export function LabsSettings() {
       qc.invalidateQueries({ queryKey: ["/api/labs"] });
       qc.invalidateQueries({ queryKey: [`/api/labs/${id}/qualifications`] });
       setQualifyLabId(null);
-      setQualPassword(""); setQualNotes("");
+      setQualPassword(""); setQualNotes(""); setQualMethod("ACCREDITATION_REVIEW"); setQualFrequency("24");
       toast({ title: "Lab qualified" });
     },
     onError: (err: Error) => toast({ title: "Qualification failed", description: err.message, variant: "destructive" }),
@@ -168,7 +168,7 @@ export function LabsSettings() {
       </div>
 
       {/* Qualify modal */}
-      <Dialog open={qualifyLabId !== null} onOpenChange={(o) => { if (!o) { setQualifyLabId(null); setQualPassword(""); setQualNotes(""); } }}>
+      <Dialog open={qualifyLabId !== null} onOpenChange={(o) => { if (!o) { setQualifyLabId(null); setQualPassword(""); setQualNotes(""); setQualMethod("ACCREDITATION_REVIEW"); setQualFrequency("24"); } }}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>Qualify lab</DialogTitle>
@@ -226,7 +226,7 @@ export function LabsSettings() {
                   signaturePassword: qualPassword,
                 },
               })}
-              disabled={!qualPassword || !qualFrequency || qualifyMutation.isPending}
+              disabled={!qualPassword || Number(qualFrequency) < 1 || qualifyMutation.isPending}
             >
               {qualifyMutation.isPending ? "Qualifying…" : "Qualify lab"}
             </Button>
