@@ -90,10 +90,22 @@ describeIfDb("migration 0013 — safety guards", () => {
     expect(raised).toContain("production-use guard");
   });
 
-  it("GUARD 2: aborts when no admin would remain after placeholder removal", async () => {
+  it("GUARD 2: aborts when deleting placeholder admin would leave no admin", async () => {
     const raised = await runMigrationInTx(async (tx) => {
-      // Wipe any pre-existing admin grants in this transaction
+      // No real admin: wipe pre-existing admin grants in this transaction
       await tx.execute(sql`DELETE FROM erp_user_roles WHERE role = 'ADMIN'`);
+      // Seed a placeholder user with ADMIN role so placeholder_admin_count > 0
+      await tx.execute(sql`
+        INSERT INTO erp_users (id, email, full_name, password_hash, status)
+        VALUES (${PLACEHOLDER_001}::uuid,
+                ${`placeholder-admin-${Date.now()}@test.local`},
+                'Placeholder Admin', 'x', 'ACTIVE')
+        ON CONFLICT (id) DO NOTHING
+      `);
+      await tx.execute(sql`
+        INSERT INTO erp_user_roles (user_id, role, granted_by_user_id)
+        VALUES (${PLACEHOLDER_001}::uuid, 'ADMIN', ${PLACEHOLDER_001}::uuid)
+      `);
     });
     expect(raised).toContain("admin-survival guard");
   });

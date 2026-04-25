@@ -33,6 +33,7 @@ DECLARE
   placeholder_audit_count   bigint;
   placeholder_sig_count     bigint;
   oldest_placeholder_hours  numeric;
+  placeholder_admin_count   bigint;
   remaining_admin_count     bigint;
 BEGIN
   -- ── GUARD 1: production-use check ─────────────────────────────────────────
@@ -62,17 +63,23 @@ BEGIN
   END IF;
 
   -- ── GUARD 2: admin-survival check ─────────────────────────────────────────
-  -- Count admins that will remain after placeholder removal (Frederik counts).
+  -- Only abort if (a) placeholders include an admin that would be deleted,
+  -- AND (b) no other admin exists. On a fresh CI DB (0 users) this is a
+  -- no-op and must not abort.
+  SELECT COUNT(*) INTO placeholder_admin_count
+    FROM erp_user_roles
+    WHERE role = 'ADMIN' AND user_id = ANY(placeholder_ids);
+
   SELECT COUNT(*) INTO remaining_admin_count
     FROM erp_user_roles r
     JOIN erp_users u ON u.id = r.user_id
     WHERE r.role = 'ADMIN'
     AND u.id != ALL(placeholder_ids);
 
-  IF remaining_admin_count = 0 THEN
+  IF placeholder_admin_count > 0 AND remaining_admin_count = 0 THEN
     RAISE EXCEPTION
-      'Migration 0013 aborted by admin-survival guard: no admin account '
-      'would remain after placeholder removal. Create a real admin via '
+      'Migration 0013 aborted by admin-survival guard: deleting placeholder '
+      'admin(s) would leave no admin account. Create a real admin via '
       'Settings → Users (or run server/scripts/recover-admin.ts) before '
       'running this migration.';
   END IF;
