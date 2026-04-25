@@ -56,6 +56,39 @@ import type {
 import { computeRoleDelta } from "./storage/users";
 import { assertNotLocked, assertValidTransition } from "./state/transitions";
 
+// ─── OOS investigation detail types (T-08) ────────────────────────────────────
+
+export type OosInvestigationDetail = schema.OosInvestigation & {
+  lotNumber: string | null;
+  coaDocumentNumber: string | null;
+  testResults: Array<{
+    id: string;
+    analyteName: string;
+    resultValue: string;
+    specMin: string | null;
+    specMax: string | null;
+    pass: boolean;
+    testedAt: Date;
+    testedByUserId: string;
+    testedByName: string | null;
+    notes: string | null;
+  }>;
+  leadInvestigatorName: string | null;
+  closedByName: string | null;
+};
+
+export type OosInvestigationSummary = {
+  id: string;
+  oosNumber: string;
+  lotId: string;
+  lotNumber: string | null;
+  coaDocumentId: string;
+  status: schema.OosStatus;
+  disposition: schema.OosDisposition | null;
+  autoCreatedAt: Date;
+  closedAt: Date | null;
+};
+
 // ─── QC Workflow type derivation ──────────────────────────────────────────────
 
 type QcWorkflowType = "FULL_LAB_TEST" | "IDENTITY_CHECK" | "COA_REVIEW" | "EXEMPT";
@@ -1925,6 +1958,152 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(schema.labTestResults)
       .where(eq(schema.labTestResults.coaDocumentId, coaId))
       .orderBy(schema.labTestResults.testedAt);
+  }
+
+  // ─── OOS investigations (T-08) ───────────────────────
+
+  private async nextOosNumber(tx: Tx): Promise<string> {
+    const year = new Date().getFullYear();
+    const [row] = await tx
+      .insert(schema.oosInvestigationCounter)
+      .values({ year, lastSeq: 1 })
+      .onConflictDoUpdate({
+        target: schema.oosInvestigationCounter.year,
+        set: { lastSeq: sql`${schema.oosInvestigationCounter.lastSeq} + 1` },
+      })
+      .returning({ lastSeq: schema.oosInvestigationCounter.lastSeq });
+    const seq = String(row!.lastSeq).padStart(3, "0");
+    return `OOS-${year}-${seq}`;
+  }
+
+  async getOrCreateOpenOosInvestigation(
+    coaDocumentId: string,
+    lotId: string,
+    labTestResultId: string,
+    userId: string,
+    requestId: string,
+    route: string,
+    tx: Tx,
+  ): Promise<schema.OosInvestigation> {
+    // Look for existing OPEN or RETEST_PENDING investigation for this COA
+    const existing = await tx
+      .select()
+      .from(schema.oosInvestigations)
+      .where(and(
+        eq(schema.oosInvestigations.coaDocumentId, coaDocumentId),
+        inArray(schema.oosInvestigations.status, ["OPEN", "RETEST_PENDING"]),
+      ))
+      .limit(1);
+
+    let investigation: schema.OosInvestigation;
+    let opened = false;
+    if (existing[0]) {
+      investigation = existing[0];
+    } else {
+      const oosNumber = await this.nextOosNumber(tx);
+      const [created] = await tx
+        .insert(schema.oosInvestigations)
+        .values({ oosNumber, coaDocumentId, lotId })
+        .returning();
+      investigation = created!;
+      opened = true;
+    }
+
+    // Attach test result via junction (idempotent)
+    await tx
+      .insert(schema.oosInvestigationTestResults)
+      .values({ investigationId: investigation.id, labTestResultId })
+      .onConflictDoNothing();
+
+    if (opened) {
+      await tx.insert(schema.auditTrail).values({
+        userId, action: "OOS_OPENED", entityType: "oos_investigation",
+        entityId: investigation.id,
+        after: { oosNumber: investigation.oosNumber, coaDocumentId, lotId, labTestResultId },
+        requestId, route,
+      });
+    }
+
+    return investigation;
+  }
+
+  async getOosInvestigationById(id: string): Promise<OosInvestigationDetail | null> {
+    const [inv] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, id));
+    if (!inv) return null;
+    const [lot] = await db.select().from(schema.lots).where(eq(schema.lots.id, inv.lotId));
+    const [coa] = await db.select().from(schema.coaDocuments).where(eq(schema.coaDocuments.id, inv.coaDocumentId));
+    const trJoin = await db
+      .select({
+        id: schema.labTestResults.id,
+        analyteName: schema.labTestResults.analyteName,
+        resultValue: schema.labTestResults.resultValue,
+        specMin: schema.labTestResults.specMin,
+        specMax: schema.labTestResults.specMax,
+        pass: schema.labTestResults.pass,
+        testedAt: schema.labTestResults.testedAt,
+        testedByUserId: schema.labTestResults.testedByUserId,
+        testedByName: schema.users.fullName,
+        notes: schema.labTestResults.notes,
+      })
+      .from(schema.oosInvestigationTestResults)
+      .innerJoin(schema.labTestResults, eq(schema.oosInvestigationTestResults.labTestResultId, schema.labTestResults.id))
+      .leftJoin(schema.users, eq(schema.labTestResults.testedByUserId, schema.users.id))
+      .where(eq(schema.oosInvestigationTestResults.investigationId, id));
+
+    let leadInvestigatorName: string | null = null;
+    if (inv.leadInvestigatorUserId) {
+      const [u] = await db.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, inv.leadInvestigatorUserId));
+      leadInvestigatorName = u?.fullName ?? null;
+    }
+    let closedByName: string | null = null;
+    if (inv.closedByUserId) {
+      const [u] = await db.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, inv.closedByUserId));
+      closedByName = u?.fullName ?? null;
+    }
+    return {
+      ...inv,
+      lotNumber: lot?.lotNumber ?? null,
+      coaDocumentNumber: coa?.documentNumber ?? null,
+      testResults: trJoin,
+      leadInvestigatorName,
+      closedByName,
+    };
+  }
+
+  async listOosInvestigations(filters: {
+    status?: schema.OosStatus | "ALL";
+    lotId?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<OosInvestigationSummary[]> {
+    const conditions: SQL[] = [];
+    if (filters.status && filters.status !== "ALL") {
+      conditions.push(eq(schema.oosInvestigations.status, filters.status));
+    } else if (!filters.status) {
+      conditions.push(eq(schema.oosInvestigations.status, "OPEN"));
+    }
+    if (filters.lotId) conditions.push(eq(schema.oosInvestigations.lotId, filters.lotId));
+    if (filters.dateFrom) conditions.push(gte(schema.oosInvestigations.autoCreatedAt, filters.dateFrom));
+    if (filters.dateTo) conditions.push(lte(schema.oosInvestigations.autoCreatedAt, filters.dateTo));
+    const whereClause = conditions.length ? and(...conditions) : undefined;
+
+    const rows = await db
+      .select({
+        id: schema.oosInvestigations.id,
+        oosNumber: schema.oosInvestigations.oosNumber,
+        lotId: schema.oosInvestigations.lotId,
+        lotNumber: schema.lots.lotNumber,
+        coaDocumentId: schema.oosInvestigations.coaDocumentId,
+        status: schema.oosInvestigations.status,
+        disposition: schema.oosInvestigations.disposition,
+        autoCreatedAt: schema.oosInvestigations.autoCreatedAt,
+        closedAt: schema.oosInvestigations.closedAt,
+      })
+      .from(schema.oosInvestigations)
+      .leftJoin(schema.lots, eq(schema.oosInvestigations.lotId, schema.lots.id))
+      .where(whereClause)
+      .orderBy(desc(schema.oosInvestigations.autoCreatedAt));
+    return rows;
   }
 
   // ─── Supplier Qualifications ─────────────────────────

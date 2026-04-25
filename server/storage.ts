@@ -303,6 +303,11 @@ export interface IStorage {
   addLabTestResult(coaId: string, data: InsertLabTestResult, userId: string, tx?: Tx): Promise<LabTestResult>;
   getLabTestResults(coaId: string): Promise<LabTestResult[]>;
 
+  // OOS investigations (T-08)
+  getOrCreateOpenOosInvestigation(coaDocumentId: string, lotId: string, labTestResultId: string, userId: string, requestId: string, route: string, tx: Tx): Promise<import("@shared/schema").OosInvestigation>;
+  getOosInvestigationById(id: string): Promise<import("./db-storage").OosInvestigationDetail | null>;
+  listOosInvestigations(filters: { status?: import("@shared/schema").OosStatus | "ALL"; lotId?: string; dateFrom?: Date; dateTo?: Date }): Promise<import("./db-storage").OosInvestigationSummary[]>;
+
   // Supplier Qualifications
   getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]>;
   getSupplierQualification(id: string): Promise<SupplierQualificationWithDetails | undefined>;
