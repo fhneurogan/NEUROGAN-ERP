@@ -1854,22 +1854,17 @@ export class DatabaseStorage implements IStorage {
         }
         // T-07: Third-party labs must have a current qualification record.
         if (lab && lab.type === "THIRD_PARTY") {
-          const [latestQual] = await tx
+          const [latestEvent] = await tx
             .select({
               eventType: schema.labQualifications.eventType,
               nextRequalificationDue: schema.labQualifications.nextRequalificationDue,
             })
             .from(schema.labQualifications)
-            .where(
-              and(
-                eq(schema.labQualifications.labId, existing.labId),
-                eq(schema.labQualifications.eventType, "QUALIFIED"),
-              ),
-            )
+            .where(eq(schema.labQualifications.labId, existing.labId))
             .orderBy(desc(schema.labQualifications.performedAt))
             .limit(1);
 
-          if (!latestQual) {
+          if (!latestEvent || latestEvent.eventType !== "QUALIFIED") {
             throw Object.assign(
               new Error(
                 `Cannot accept COA: lab "${lab.name}" has not been qualified. Qualify the lab before accepting COAs.`,
@@ -1878,10 +1873,10 @@ export class DatabaseStorage implements IStorage {
             );
           }
           const today = new Date().toISOString().slice(0, 10);
-          if (latestQual.nextRequalificationDue && latestQual.nextRequalificationDue < today) {
+          if (latestEvent.nextRequalificationDue && latestEvent.nextRequalificationDue < today) {
             throw Object.assign(
               new Error(
-                `Cannot accept COA: lab "${lab.name}" requalification was due ${latestQual.nextRequalificationDue}. Requalify the lab before accepting COAs.`,
+                `Cannot accept COA: lab "${lab.name}" requalification was due ${latestEvent.nextRequalificationDue}. Requalify the lab before accepting COAs.`,
               ),
               { status: 422 },
             );

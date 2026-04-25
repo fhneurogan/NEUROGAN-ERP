@@ -32,7 +32,7 @@ import {
   type AuditRow,
   type SignatureRow,
   type Lab, type InsertLab,
-  type LabQualification, type InsertLabQualification, type LabQualificationWithDetails,
+  type LabQualificationWithDetails,
   type ApprovedMaterial,
 } from "@shared/schema";
 import type { Tx } from "./db";
