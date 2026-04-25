@@ -58,6 +58,15 @@ import { Plus, Copy, ShieldAlert, UserX, UserCheck, KeyRound } from "lucide-reac
 const ALL_ROLES = ["ADMIN", "QA", "PRODUCTION", "WAREHOUSE", "LAB_TECH", "VIEWER"] as const;
 type Role = (typeof ALL_ROLES)[number];
 
+const ROLE_LABEL: Record<Role, string> = {
+  ADMIN: "ADMIN",
+  QA: "QA",
+  PRODUCTION: "PRODUCTION",
+  WAREHOUSE: "WAREHOUSE",
+  LAB_TECH: "Lab",
+  VIEWER: "VIEWER",
+};
+
 interface UserRow {
   id: string;
   email: string;
@@ -89,7 +98,7 @@ function RoleBadges({ roles }: { roles: Role[] }) {
     <div className="flex flex-wrap gap-1">
       {roles.map((r) => (
         <Badge key={r} variant={r === "ADMIN" ? "default" : "secondary"} className="text-xs">
-          {r}
+          {ROLE_LABEL[r]}
         </Badge>
       ))}
     </div>
@@ -401,7 +410,7 @@ export default function SettingsUsers() {
                               }}
                               data-testid={`checkbox-role-${r}`}
                             />
-                            <span>{r}</span>
+                            <span>{ROLE_LABEL[r]}</span>
                           </label>
                         );
                       })}
@@ -583,7 +592,7 @@ function EditRolesDialog({
               onCheckedChange={(c) => toggle(r, !!c)}
               data-testid={`checkbox-edit-role-${r}`}
             />
-            <span>{r}</span>
+            <span>{ROLE_LABEL[r]}</span>
           </label>
         ))}
       </div>
