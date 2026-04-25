@@ -948,6 +948,7 @@ export const insertLabQualificationSchema = createInsertSchema(labQualifications
 });
 export type LabQualification = typeof labQualifications.$inferSelect;
 export type InsertLabQualification = z.infer<typeof insertLabQualificationSchema>;
+export type LabQualificationWithDetails = LabQualification & { performedByName: string };
 
 // ─── T-08 OOS investigations ──────────────────────────────────────────────
 
@@ -968,8 +969,8 @@ export type OosRecallClass = z.infer<typeof oosRecallClassEnum>;
 export const oosInvestigations = pgTable("erp_oos_investigations", {
   id:                              uuid("id").primaryKey().defaultRandom(),
   oosNumber:                       text("oos_number").notNull().unique(),
-  coaDocumentId:                   varchar("coa_document_id").notNull(),
-  lotId:                           varchar("lot_id").notNull(),
+  coaDocumentId:                   varchar("coa_document_id").notNull().references(() => coaDocuments.id),
+  lotId:                           varchar("lot_id").notNull().references(() => lots.id),
   status:                          text("status").$type<OosStatus>().notNull().default("OPEN"),
   disposition:                     text("disposition").$type<OosDisposition | null>(),
   dispositionReason:               text("disposition_reason"),
@@ -990,10 +991,12 @@ export const oosInvestigations = pgTable("erp_oos_investigations", {
 });
 
 export type OosInvestigation = typeof oosInvestigations.$inferSelect;
+export const insertOosInvestigationSchema = createInsertSchema(oosInvestigations);
+export type InsertOosInvestigation = z.infer<typeof insertOosInvestigationSchema>;
 
 export const oosInvestigationTestResults = pgTable("erp_oos_investigation_test_results", {
   investigationId:  uuid("investigation_id").notNull().references(() => oosInvestigations.id, { onDelete: "cascade" }),
-  labTestResultId:  uuid("lab_test_result_id").notNull(),
+  labTestResultId:  uuid("lab_test_result_id").notNull().references(() => labTestResults.id),
 }, (t) => ({
   pk: primaryKey({ columns: [t.investigationId, t.labTestResultId] }),
 }));
@@ -1002,4 +1005,3 @@ export const oosInvestigationCounter = pgTable("erp_oos_investigation_counter", 
   year:    integer("year").primaryKey(),
   lastSeq: integer("last_seq").notNull().default(0),
 });
-export type LabQualificationWithDetails = LabQualification & { performedByName: string };

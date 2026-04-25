@@ -1,6 +1,6 @@
 -- 0016: T-08 OOS investigation workflow.
--- Auto-creates an investigation when a lab test result records pass=false.
--- QC closes with disposition + signature per 21 CFR §111.113 / §111.123 / SOP-QC-006.
+-- Tables supporting OOS investigations per 21 CFR §111.113 / §111.123 / SOP-QC-006.
+-- Application logic in server/db-storage.ts opens an investigation when pass=false is recorded.
 -- This migration touches no user-adjacent tables; pnpm check:migrations passes by construction.
 
 CREATE TABLE "erp_oos_investigations" (
