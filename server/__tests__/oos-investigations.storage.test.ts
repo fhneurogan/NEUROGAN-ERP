@@ -140,6 +140,7 @@ describeIfDb("OOS investigation storage", () => {
       // second call with same user is a no-op
       await db.transaction((tx) => storage.assignOosLeadInvestigator(inv.id, qaUser.id, qaUser.id, "rid-2", "POST /assign", tx));
       const auditRows = await db.select().from(schema.auditTrail).where(and(eq(schema.auditTrail.entityType, "oos_investigation"), eq(schema.auditTrail.entityId, inv.id)));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(auditRows.filter(r => r.action === "UPDATE" && (r.meta as any)?.subtype === "ASSIGN_LEAD_INVESTIGATOR")).toHaveLength(1);
     });
 

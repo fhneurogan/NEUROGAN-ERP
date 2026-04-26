@@ -30,17 +30,19 @@ describeIfDb("addLabTestResult OOS hook", () => {
   });
 
   it("pass=true does NOT create an investigation", async () => {
-    await db.transaction((tx) => storage.addLabTestResult(coaId, {
-      analyteName: "moisture", resultValue: "5", specMin: "0", specMax: "10", pass: true,
-    } as any, qaUser.id, tx));
+    await db.transaction((tx) => storage.addLabTestResult(coaId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { analyteName: "moisture", resultValue: "5", specMin: "0", specMax: "10", pass: true } as any,
+      qaUser.id, tx));
     const invs = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.coaDocumentId, coaId));
     expect(invs).toHaveLength(0);
   });
 
   it("pass=false creates an investigation and flips lot to ON_HOLD", async () => {
-    await db.transaction((tx) => storage.addLabTestResult(coaId, {
-      analyteName: "potency", resultValue: "85", specMin: "90", specMax: "110", pass: false,
-    } as any, qaUser.id, tx));
+    await db.transaction((tx) => storage.addLabTestResult(coaId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { analyteName: "potency", resultValue: "85", specMin: "90", specMax: "110", pass: false } as any,
+      qaUser.id, tx));
     const invs = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.coaDocumentId, coaId));
     expect(invs).toHaveLength(1);
     const [lot] = await db.select().from(schema.lots).where(eq(schema.lots.id, lotId));
@@ -48,12 +50,14 @@ describeIfDb("addLabTestResult OOS hook", () => {
   });
 
   it("second pass=false on same COA attaches to existing investigation", async () => {
-    await db.transaction((tx) => storage.addLabTestResult(coaId, {
-      analyteName: "potency", resultValue: "85", specMin: "90", specMax: "110", pass: false,
-    } as any, qaUser.id, tx));
-    await db.transaction((tx) => storage.addLabTestResult(coaId, {
-      analyteName: "microbial", resultValue: "1500", specMin: "0", specMax: "1000", pass: false,
-    } as any, qaUser.id, tx));
+    await db.transaction((tx) => storage.addLabTestResult(coaId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { analyteName: "potency", resultValue: "85", specMin: "90", specMax: "110", pass: false } as any,
+      qaUser.id, tx));
+    await db.transaction((tx) => storage.addLabTestResult(coaId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { analyteName: "microbial", resultValue: "1500", specMin: "0", specMax: "1000", pass: false } as any,
+      qaUser.id, tx));
     const invs = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.coaDocumentId, coaId));
     expect(invs).toHaveLength(1);
     const junction = await db.select().from(schema.oosInvestigationTestResults).where(eq(schema.oosInvestigationTestResults.investigationId, invs[0].id));
@@ -62,9 +66,10 @@ describeIfDb("addLabTestResult OOS hook", () => {
 
   it("REJECTED lot is NOT flipped back to ON_HOLD by a failing test", async () => {
     await db.update(schema.lots).set({ quarantineStatus: "REJECTED" }).where(eq(schema.lots.id, lotId));
-    await db.transaction((tx) => storage.addLabTestResult(coaId, {
-      analyteName: "potency", resultValue: "85", specMin: "90", specMax: "110", pass: false,
-    } as any, qaUser.id, tx));
+    await db.transaction((tx) => storage.addLabTestResult(coaId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { analyteName: "potency", resultValue: "85", specMin: "90", specMax: "110", pass: false } as any,
+      qaUser.id, tx));
     const [lot] = await db.select().from(schema.lots).where(eq(schema.lots.id, lotId));
     expect(lot.quarantineStatus).toBe("REJECTED");
   });
