@@ -316,8 +316,9 @@ export interface IStorage {
   assignOosLeadInvestigator(investigationId: string, leadUserId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
   setOosRetestPending(investigationId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
   clearOosRetestPending(investigationId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
-  closeOosInvestigation(investigationId: string, payload: { disposition: "APPROVED" | "REJECTED" | "RECALL"; dispositionReason: string; leadInvestigatorUserId: string; recallDetails?: { class: OosRecallClass; distributionScope: string; fdaNotificationDate?: Date; customerNotificationDate?: Date; recoveryTargetDate?: Date; affectedLotIds?: string[]; }; }, closedByUserId: string, signatureId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
-  markOosNoInvestigationNeeded(investigationId: string, reason: OosNoInvestigationReason, reasonNarrative: string, leadInvestigatorUserId: string, closedByUserId: string, signatureId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  closeOosInvestigation(investigationId: string, payload: { disposition: "APPROVED" | "REJECTED" | "RECALL"; dispositionReason: string; leadInvestigatorUserId: string; recallDetails?: { class: OosRecallClass; distributionScope: string; fdaNotificationDate?: Date; customerNotificationDate?: Date; recoveryTargetDate?: Date; affectedLotIds?: string[]; }; }, closedByUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  markOosNoInvestigationNeeded(investigationId: string, reason: OosNoInvestigationReason, reasonNarrative: string, leadInvestigatorUserId: string, closedByUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  setOosClosureSignature(investigationId: string, signatureId: string, tx: Tx): Promise<void>;
 
   // Supplier Qualifications
   getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]>;

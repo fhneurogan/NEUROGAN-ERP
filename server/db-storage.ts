@@ -2097,6 +2097,7 @@ export class DatabaseStorage implements IStorage {
   ): Promise<schema.OosInvestigation> {
     const [existing] = await tx.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, investigationId));
     if (!existing) throw Object.assign(new Error("Investigation not found"), { status: 404 });
+    if (existing.status === "CLOSED") throw Object.assign(new Error("Cannot modify a closed investigation"), { status: 409 });
     if (existing.leadInvestigatorUserId === leadUserId) return existing;
     const [updated] = await tx
       .update(schema.oosInvestigations)
@@ -2135,7 +2136,7 @@ export class DatabaseStorage implements IStorage {
     const [existing] = await tx.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, investigationId));
     if (!existing) throw Object.assign(new Error("Investigation not found"), { status: 404 });
     if (existing.status === "CLOSED") throw Object.assign(new Error("Investigation already closed"), { status: 409 });
-    if (existing.status === "OPEN") return existing;
+    if (existing.status !== "RETEST_PENDING") return existing;
     const [updated] = await tx
       .update(schema.oosInvestigations)
       .set({ status: "OPEN", updatedAt: new Date() })
@@ -2165,7 +2166,6 @@ export class DatabaseStorage implements IStorage {
       };
     },
     closedByUserId: string,
-    signatureId: string,
     requestId: string,
     route: string,
     tx: Tx,
@@ -2199,7 +2199,6 @@ export class DatabaseStorage implements IStorage {
         recallAffectedLotIds: payload.recallDetails?.affectedLotIds ?? null,
         closedByUserId,
         closedAt: new Date(),
-        closureSignatureId: signatureId,
         updatedAt: new Date(),
       })
       .where(eq(schema.oosInvestigations.id, investigationId))
@@ -2215,7 +2214,7 @@ export class DatabaseStorage implements IStorage {
     await tx.insert(schema.auditTrail).values({
       userId: closedByUserId, action: "OOS_CLOSED", entityType: "oos_investigation", entityId: investigationId,
       before: { status: existing.status, disposition: existing.disposition },
-      after: { status: "CLOSED", disposition: payload.disposition, dispositionReason: payload.dispositionReason, closureSignatureId: signatureId },
+      after: { status: "CLOSED", disposition: payload.disposition, dispositionReason: payload.dispositionReason },
       requestId, route,
     });
 
@@ -2228,7 +2227,6 @@ export class DatabaseStorage implements IStorage {
     reasonNarrative: string,
     leadInvestigatorUserId: string,
     closedByUserId: string,
-    signatureId: string,
     requestId: string,
     route: string,
     tx: Tx,
@@ -2249,7 +2247,6 @@ export class DatabaseStorage implements IStorage {
         leadInvestigatorUserId,
         closedByUserId,
         closedAt: new Date(),
-        closureSignatureId: signatureId,
         updatedAt: new Date(),
       })
       .where(eq(schema.oosInvestigations.id, investigationId))
@@ -2262,6 +2259,14 @@ export class DatabaseStorage implements IStorage {
     });
 
     return updated!;
+  }
+
+  async setOosClosureSignature(investigationId: string, signatureId: string, tx: Tx): Promise<void> {
+    if (!signatureId) throw Object.assign(new Error("signatureId is required"), { status: 500 });
+    await tx
+      .update(schema.oosInvestigations)
+      .set({ closureSignatureId: signatureId })
+      .where(eq(schema.oosInvestigations.id, investigationId));
   }
 
   // ─── Supplier Qualifications ─────────────────────────
