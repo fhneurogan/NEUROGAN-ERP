@@ -34,6 +34,10 @@ import {
   type Lab, type InsertLab,
   type LabQualificationWithDetails,
   type ApprovedMaterial,
+  type OosInvestigation,
+  type OosInvestigationDetail,
+  type OosInvestigationSummary,
+  type OosStatus,
 } from "@shared/schema";
 import type { Tx } from "./db";
 
@@ -304,9 +308,9 @@ export interface IStorage {
   getLabTestResults(coaId: string): Promise<LabTestResult[]>;
 
   // OOS investigations (T-08)
-  getOrCreateOpenOosInvestigation(coaDocumentId: string, lotId: string, labTestResultId: string, userId: string, requestId: string, route: string, tx: Tx): Promise<import("@shared/schema").OosInvestigation>;
-  getOosInvestigationById(id: string): Promise<import("./db-storage").OosInvestigationDetail | null>;
-  listOosInvestigations(filters: { status?: import("@shared/schema").OosStatus | "ALL"; lotId?: string; dateFrom?: Date; dateTo?: Date }): Promise<import("./db-storage").OosInvestigationSummary[]>;
+  getOrCreateOpenOosInvestigation(coaDocumentId: string, lotId: string, labTestResultId: string, userId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  getOosInvestigationById(id: string): Promise<OosInvestigationDetail | null>;
+  listOosInvestigations(filters: { status?: OosStatus | "ALL"; lotId?: string; dateFrom?: Date; dateTo?: Date }): Promise<OosInvestigationSummary[]>;
 
   // Supplier Qualifications
   getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]>;

@@ -36,6 +36,8 @@ import {
   type Lab, type InsertLab,
   type LabQualificationWithDetails,
   type ApprovedMaterial,
+  type OosInvestigationDetail,
+  type OosInvestigationSummary,
 } from "@shared/schema";
 import type {
   IStorage,
@@ -55,39 +57,6 @@ import type {
 } from "./storage";
 import { computeRoleDelta } from "./storage/users";
 import { assertNotLocked, assertValidTransition } from "./state/transitions";
-
-// ─── OOS investigation detail types (T-08) ────────────────────────────────────
-
-export type OosInvestigationDetail = schema.OosInvestigation & {
-  lotNumber: string | null;
-  coaDocumentNumber: string | null;
-  testResults: Array<{
-    id: string;
-    analyteName: string;
-    resultValue: string;
-    specMin: string | null;
-    specMax: string | null;
-    pass: boolean;
-    testedAt: Date;
-    testedByUserId: string;
-    testedByName: string | null;
-    notes: string | null;
-  }>;
-  leadInvestigatorName: string | null;
-  closedByName: string | null;
-};
-
-export type OosInvestigationSummary = {
-  id: string;
-  oosNumber: string;
-  lotId: string;
-  lotNumber: string | null;
-  coaDocumentId: string;
-  status: schema.OosStatus;
-  disposition: schema.OosDisposition | null;
-  autoCreatedAt: Date;
-  closedAt: Date | null;
-};
 
 // ─── QC Workflow type derivation ──────────────────────────────────────────────
 
@@ -2028,11 +1997,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOosInvestigationById(id: string): Promise<OosInvestigationDetail | null> {
-    const [inv] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, id));
-    if (!inv) return null;
-    const [lot] = await db.select().from(schema.lots).where(eq(schema.lots.id, inv.lotId));
-    const [coa] = await db.select().from(schema.coaDocuments).where(eq(schema.coaDocuments.id, inv.coaDocumentId));
-    const trJoin = await db
+    const [invRow] = await db
+      .select({
+        inv: schema.oosInvestigations,
+        lotNumber: schema.lots.lotNumber,
+        coaDocumentNumber: schema.coaDocuments.documentNumber,
+        leadInvestigatorName: schema.users.fullName,
+      })
+      .from(schema.oosInvestigations)
+      .leftJoin(schema.lots, eq(schema.oosInvestigations.lotId, schema.lots.id))
+      .leftJoin(schema.coaDocuments, eq(schema.oosInvestigations.coaDocumentId, schema.coaDocuments.id))
+      .leftJoin(schema.users, eq(schema.oosInvestigations.leadInvestigatorUserId, schema.users.id))
+      .where(eq(schema.oosInvestigations.id, id));
+
+    if (!invRow) return null;
+    const inv = invRow.inv;
+
+    // Second query: closed-by user name (separate because it's a second FK to the same users table)
+    let closedByName: string | null = null;
+    if (inv.closedByUserId) {
+      const [u] = await db
+        .select({ fullName: schema.users.fullName })
+        .from(schema.users)
+        .where(eq(schema.users.id, inv.closedByUserId));
+      closedByName = u?.fullName ?? null;
+    }
+
+    const testResults = await db
       .select({
         id: schema.labTestResults.id,
         analyteName: schema.labTestResults.analyteName,
@@ -2050,22 +2041,12 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(schema.users, eq(schema.labTestResults.testedByUserId, schema.users.id))
       .where(eq(schema.oosInvestigationTestResults.investigationId, id));
 
-    let leadInvestigatorName: string | null = null;
-    if (inv.leadInvestigatorUserId) {
-      const [u] = await db.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, inv.leadInvestigatorUserId));
-      leadInvestigatorName = u?.fullName ?? null;
-    }
-    let closedByName: string | null = null;
-    if (inv.closedByUserId) {
-      const [u] = await db.select({ fullName: schema.users.fullName }).from(schema.users).where(eq(schema.users.id, inv.closedByUserId));
-      closedByName = u?.fullName ?? null;
-    }
     return {
       ...inv,
-      lotNumber: lot?.lotNumber ?? null,
-      coaDocumentNumber: coa?.documentNumber ?? null,
-      testResults: trJoin,
-      leadInvestigatorName,
+      lotNumber: invRow.lotNumber ?? null,
+      coaDocumentNumber: invRow.coaDocumentNumber ?? null,
+      testResults,
+      leadInvestigatorName: invRow.leadInvestigatorName ?? null,
       closedByName,
     };
   }

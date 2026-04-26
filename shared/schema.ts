@@ -994,6 +994,37 @@ export type OosInvestigation = typeof oosInvestigations.$inferSelect;
 export const insertOosInvestigationSchema = createInsertSchema(oosInvestigations);
 export type InsertOosInvestigation = z.infer<typeof insertOosInvestigationSchema>;
 
+export type OosInvestigationDetail = OosInvestigation & {
+  lotNumber: string | null;
+  coaDocumentNumber: string | null;
+  testResults: Array<{
+    id: string;
+    analyteName: string;
+    resultValue: string;
+    specMin: string | null;
+    specMax: string | null;
+    pass: boolean;
+    testedAt: Date;
+    testedByUserId: string;
+    testedByName: string | null;
+    notes: string | null;
+  }>;
+  leadInvestigatorName: string | null;
+  closedByName: string | null;
+};
+
+export type OosInvestigationSummary = {
+  id: string;
+  oosNumber: string;
+  lotId: string;
+  lotNumber: string | null;
+  coaDocumentId: string;
+  status: OosStatus;
+  disposition: OosDisposition | null;
+  autoCreatedAt: Date;
+  closedAt: Date | null;
+};
+
 export const oosInvestigationTestResults = pgTable("erp_oos_investigation_test_results", {
   investigationId:  uuid("investigation_id").notNull().references(() => oosInvestigations.id, { onDelete: "cascade" }),
   labTestResultId:  uuid("lab_test_result_id").notNull().references(() => labTestResults.id),

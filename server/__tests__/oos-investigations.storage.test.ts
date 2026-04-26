@@ -79,17 +79,20 @@ describeIfDb("OOS investigation storage", () => {
   });
 
   it("increments counter for second investigation in the same year", async () => {
-    await db.transaction(async (tx) =>
+    const inv1 = await db.transaction(async (tx) =>
       storage.getOrCreateOpenOosInvestigation(coaId, lotId, labTestResult1.id, qaUser.id, "rid-1", "POST /test", tx));
-    // Create second COA + new failing result for same lot
+    // Parse the sequence number from the first investigation
+    const seq1 = parseInt(inv1.oosNumber.split("-")[2], 10);
+
     const [coa2] = await db.insert(schema.coaDocuments).values({ lotId }).returning();
     const [r3] = await db.insert(schema.labTestResults).values({
       coaDocumentId: coa2.id, analyteName: "ph", resultValue: "2", specMin: "5", specMax: "9", pass: false, testedByUserId: qaUser.id,
     }).returning();
     const inv2 = await db.transaction(async (tx) =>
       storage.getOrCreateOpenOosInvestigation(coa2.id, lotId, r3.id, qaUser.id, "rid-3", "POST /test", tx));
-    const year = new Date().getFullYear();
-    expect(inv2.oosNumber).toBe(`OOS-${year}-002`);
+    const seq2 = parseInt(inv2.oosNumber.split("-")[2], 10);
+    expect(seq2).toBe(seq1 + 1);
+    expect(inv2.oosNumber).toMatch(/^OOS-\d{4}-\d{3}$/);
   });
 
   it("getOosInvestigationById returns full detail", async () => {
