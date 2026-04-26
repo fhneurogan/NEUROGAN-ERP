@@ -1,4 +1,4 @@
-import { eq, ne, desc, asc, and, sql, gte, lte, inArray, getTableColumns, type SQL } from "drizzle-orm";
+import { eq, ne, desc, asc, and, sql, gte, lte, inArray, notInArray, getTableColumns, type SQL } from "drizzle-orm";
 import { computeZ14Plan } from "./lib/z14-sampling";
 import { db, type Tx } from "./db";
 import * as schema from "@shared/schema";
@@ -1908,16 +1908,35 @@ export class DatabaseStorage implements IStorage {
   // ─── Lab Test Results (T-06) ────────────────────────
 
   async addLabTestResult(coaId: string, data: InsertLabTestResult, userId: string, tx?: Tx): Promise<LabTestResult> {
-    const [result] = await (tx ?? db).insert(schema.labTestResults).values({
+    const txOrDb = tx ?? db;
+    const [result] = await txOrDb.insert(schema.labTestResults).values({
       ...data,
       coaDocumentId: coaId,
       testedByUserId: userId,
     }).returning();
 
     if (!data.pass) {
-      await (tx ?? db).update(schema.coaDocuments)
+      await txOrDb.update(schema.coaDocuments)
         .set({ overallResult: "FAIL" })
         .where(eq(schema.coaDocuments.id, coaId));
+
+      // T-08: auto-create or attach OOS investigation, flip lot to ON_HOLD if not terminal
+      const [coa] = await txOrDb
+        .select({ lotId: schema.coaDocuments.lotId })
+        .from(schema.coaDocuments)
+        .where(eq(schema.coaDocuments.id, coaId));
+      if (coa?.lotId) {
+        await this.getOrCreateOpenOosInvestigation(
+          coaId, coa.lotId, result!.id, userId,
+          "auto-hook", "addLabTestResult", txOrDb as Tx,
+        );
+        await txOrDb.update(schema.lots)
+          .set({ quarantineStatus: "ON_HOLD" })
+          .where(and(
+            eq(schema.lots.id, coa.lotId),
+            notInArray(schema.lots.quarantineStatus, ["ON_HOLD", "REJECTED"]),
+          ));
+      }
     }
 
     return result!;
