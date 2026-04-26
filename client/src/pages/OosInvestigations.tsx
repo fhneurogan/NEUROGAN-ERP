@@ -263,6 +263,7 @@ function CloseInvestigationModal({ open, onOpenChange, leadUserId, onSubmit, pen
   const [fdaNot, setFdaNot] = useState("");
   const [custNot, setCustNot] = useState("");
   const [recovTarget, setRecovTarget] = useState("");
+  const [affectedLots, setAffectedLots] = useState("");
   const [password, setPassword] = useState("");
 
   return (
@@ -301,6 +302,13 @@ function CloseInvestigationModal({ open, onOpenChange, leadUserId, onSubmit, pen
               <Input type="date" value={custNot} onChange={(e) => setCustNot(e.target.value)} />
               <Label>Recovery target date</Label>
               <Input type="date" value={recovTarget} onChange={(e) => setRecovTarget(e.target.value)} />
+              <Label>Affected lot IDs (one per line)</Label>
+              <Textarea
+                value={affectedLots}
+                onChange={(e) => setAffectedLots(e.target.value)}
+                placeholder="Enter lot IDs, one per line"
+                rows={3}
+              />
             </div>
           )}
           <div>
@@ -318,6 +326,7 @@ function CloseInvestigationModal({ open, onOpenChange, leadUserId, onSubmit, pen
               fdaNotificationDate: fdaNot || undefined,
               customerNotificationDate: custNot || undefined,
               recoveryTargetDate: recovTarget || undefined,
+              affectedLotIds: affectedLots ? affectedLots.split(/[\n,]+/).map(s => s.trim()).filter(Boolean) : undefined,
             } : undefined,
             signaturePassword: password,
           })}>{pending ? "Closing…" : "Sign and close"}</Button>
