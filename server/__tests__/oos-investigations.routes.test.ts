@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
 import type { Express } from "express";
 import { buildTestApp } from "./helpers/test-app";
@@ -24,6 +24,13 @@ describeIfDb("OOS investigation routes", () => {
 
   beforeAll(async () => {
     app = await buildTestApp();
+  });
+
+  afterAll(async () => {
+    // clean up so other test suites can delete erp_electronic_signatures without FK violations
+    await db.delete(schema.oosInvestigationTestResults);
+    await db.delete(schema.oosInvestigations);
+    await db.delete(schema.oosInvestigationCounter);
   });
 
   beforeEach(async () => {

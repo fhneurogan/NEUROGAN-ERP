@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { storage } from "../storage";
 import { db } from "../db";
 import * as schema from "@shared/schema";
@@ -17,6 +17,13 @@ describeIfDb("OOS investigation storage", () => {
 
   beforeAll(async () => {
     // wipe in dependency order
+    await db.delete(schema.oosInvestigationTestResults);
+    await db.delete(schema.oosInvestigations);
+    await db.delete(schema.oosInvestigationCounter);
+  });
+
+  afterAll(async () => {
+    // clean up so other test suites can delete erp_electronic_signatures without FK violations
     await db.delete(schema.oosInvestigationTestResults);
     await db.delete(schema.oosInvestigations);
     await db.delete(schema.oosInvestigationCounter);
