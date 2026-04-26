@@ -27,10 +27,15 @@ describeIfDb("OOS investigation routes", () => {
   });
 
   afterAll(async () => {
-    // clean up so other test suites can delete erp_electronic_signatures without FK violations
     await db.delete(schema.oosInvestigationTestResults);
     await db.delete(schema.oosInvestigations);
     await db.delete(schema.oosInvestigationCounter);
+    await db.delete(schema.labTestResults);
+    await db.delete(schema.coaDocuments);
+    await db.delete(schema.lots);
+    await db.delete(schema.products);
+    await db.delete(schema.userRoles);
+    await db.delete(schema.users);
   });
 
   beforeEach(async () => {
