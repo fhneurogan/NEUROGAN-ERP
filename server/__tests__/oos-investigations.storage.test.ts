@@ -114,4 +114,124 @@ describeIfDb("OOS investigation storage", () => {
     const closed = await storage.listOosInvestigations({ status: "CLOSED" });
     expect(closed.every((i) => i.status === "CLOSED")).toBe(true);
   });
+
+  describe("transitions and closures", () => {
+    let inv: schema.OosInvestigation;
+    let signatureId: string;
+
+    beforeEach(async () => {
+      inv = await db.transaction(async (tx) =>
+        storage.getOrCreateOpenOosInvestigation(coaId, lotId, labTestResult1.id, qaUser.id, "rid-x", "POST /x", tx));
+      // Insert a signature row to use as closure_signature_id
+      const [sig] = await db.insert(schema.electronicSignatures).values({
+        userId: qaUser.id, meaning: "OOS_INVESTIGATION_CLOSE",
+        entityType: "oos_investigation", entityId: inv.id,
+        fullNameAtSigning: qaUser.fullName,
+        requestId: "rid-sig",
+        manifestationJson: { meaning: "OOS_INVESTIGATION_CLOSE" },
+      }).returning();
+      signatureId = sig!.id;
+    });
+
+    it("assignOosLeadInvestigator sets the user, idempotent on same user", async () => {
+      await db.transaction((tx) => storage.assignOosLeadInvestigator(inv.id, qaUser.id, qaUser.id, "rid-1", "POST /assign", tx));
+      const [after1] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, inv.id));
+      expect(after1.leadInvestigatorUserId).toBe(qaUser.id);
+      // second call with same user is a no-op
+      await db.transaction((tx) => storage.assignOosLeadInvestigator(inv.id, qaUser.id, qaUser.id, "rid-2", "POST /assign", tx));
+      const auditRows = await db.select().from(schema.auditTrail).where(and(eq(schema.auditTrail.entityType, "oos_investigation"), eq(schema.auditTrail.entityId, inv.id)));
+      expect(auditRows.filter(r => r.action === "UPDATE" && (r.meta as any)?.subtype === "ASSIGN_LEAD_INVESTIGATOR")).toHaveLength(1);
+    });
+
+    it("setOosRetestPending and clearOosRetestPending flip status", async () => {
+      await db.transaction((tx) => storage.setOosRetestPending(inv.id, qaUser.id, "rid-r1", "POST /retest", tx));
+      const [a] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, inv.id));
+      expect(a.status).toBe("RETEST_PENDING");
+      await db.transaction((tx) => storage.clearOosRetestPending(inv.id, qaUser.id, "rid-r2", "POST /clear", tx));
+      const [b] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, inv.id));
+      expect(b.status).toBe("OPEN");
+    });
+
+    it("closeOosInvestigation REJECTED flips lot to REJECTED", async () => {
+      await db.transaction((tx) => storage.assignOosLeadInvestigator(inv.id, qaUser.id, qaUser.id, "rid-l", "POST /a", tx));
+      await db.transaction((tx) => storage.closeOosInvestigation(
+        inv.id,
+        { disposition: "REJECTED", dispositionReason: "Confirmed OOS, lot fails spec", leadInvestigatorUserId: qaUser.id },
+        qaUser.id, signatureId, "rid-c", "POST /close", tx,
+      ));
+      const [closed] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, inv.id));
+      expect(closed.status).toBe("CLOSED");
+      expect(closed.disposition).toBe("REJECTED");
+      expect(closed.closureSignatureId).toBe(signatureId);
+      const [lotRow] = await db.select().from(schema.lots).where(eq(schema.lots.id, lotId));
+      expect(lotRow.quarantineStatus).toBe("REJECTED");
+    });
+
+    it("closeOosInvestigation RECALL requires recallDetails", async () => {
+      await db.transaction((tx) => storage.assignOosLeadInvestigator(inv.id, qaUser.id, qaUser.id, "rid-l", "POST /a", tx));
+      await expect(db.transaction((tx) => storage.closeOosInvestigation(
+        inv.id,
+        { disposition: "RECALL", dispositionReason: "needs recall", leadInvestigatorUserId: qaUser.id },
+        qaUser.id, signatureId, "rid-c", "POST /close", tx,
+      ))).rejects.toThrow(/recall/i);
+    });
+
+    it("closeOosInvestigation RECALL with full details persists recall fields", async () => {
+      await db.transaction((tx) => storage.assignOosLeadInvestigator(inv.id, qaUser.id, qaUser.id, "rid-l", "POST /a", tx));
+      await db.transaction((tx) => storage.closeOosInvestigation(
+        inv.id,
+        {
+          disposition: "RECALL",
+          dispositionReason: "Class II recall — distributed",
+          leadInvestigatorUserId: qaUser.id,
+          recallDetails: {
+            class: "II", distributionScope: "Sold to 4 distributors in CA, OR",
+            fdaNotificationDate: new Date("2026-04-30"),
+            customerNotificationDate: new Date("2026-04-29"),
+            recoveryTargetDate: new Date("2026-05-15"),
+            affectedLotIds: [],
+          },
+        },
+        qaUser.id, signatureId, "rid-c", "POST /close", tx,
+      ));
+      const [closed] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, inv.id));
+      expect(closed.recallClass).toBe("II");
+      expect(closed.recallDistributionScope).toContain("4 distributors");
+    });
+
+    it("markOosNoInvestigationNeeded fast-path closure", async () => {
+      await db.transaction((tx) => storage.markOosNoInvestigationNeeded(
+        inv.id, "LAB_ERROR", "Operator pipetting error during sample prep", qaUser.id, qaUser.id, signatureId, "rid-n", "POST /n", tx,
+      ));
+      const [closed] = await db.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, inv.id));
+      expect(closed.status).toBe("CLOSED");
+      expect(closed.disposition).toBe("NO_INVESTIGATION_NEEDED");
+      expect(closed.noInvestigationReason).toBe("LAB_ERROR");
+      expect(closed.leadInvestigatorUserId).toBe(qaUser.id);
+      const [lotRow] = await db.select().from(schema.lots).where(eq(schema.lots.id, lotId));
+      expect(lotRow.quarantineStatus).not.toBe("REJECTED");
+    });
+
+    it("close on already-CLOSED rejects", async () => {
+      await db.transaction((tx) => storage.assignOosLeadInvestigator(inv.id, qaUser.id, qaUser.id, "rid-l", "POST /a", tx));
+      await db.transaction((tx) => storage.closeOosInvestigation(
+        inv.id,
+        { disposition: "APPROVED", dispositionReason: "retest passed", leadInvestigatorUserId: qaUser.id },
+        qaUser.id, signatureId, "rid-c1", "POST /close", tx,
+      ));
+      await expect(db.transaction((tx) => storage.closeOosInvestigation(
+        inv.id,
+        { disposition: "APPROVED", dispositionReason: "again", leadInvestigatorUserId: qaUser.id },
+        qaUser.id, signatureId, "rid-c2", "POST /close", tx,
+      ))).rejects.toThrow(/already closed/i);
+    });
+
+    it("close without lead investigator rejects", async () => {
+      await expect(db.transaction((tx) => storage.closeOosInvestigation(
+        inv.id,
+        { disposition: "APPROVED", dispositionReason: "retest passed", leadInvestigatorUserId: null as unknown as string },
+        qaUser.id, signatureId, "rid-c", "POST /close", tx,
+      ))).rejects.toThrow(/lead investigator/i);
+    });
+  });
 });

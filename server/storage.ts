@@ -38,6 +38,8 @@ import {
   type OosInvestigationDetail,
   type OosInvestigationSummary,
   type OosStatus,
+  type OosRecallClass,
+  type OosNoInvestigationReason,
 } from "@shared/schema";
 import type { Tx } from "./db";
 
@@ -311,6 +313,11 @@ export interface IStorage {
   getOrCreateOpenOosInvestigation(coaDocumentId: string, lotId: string, labTestResultId: string, userId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
   getOosInvestigationById(id: string): Promise<OosInvestigationDetail | null>;
   listOosInvestigations(filters: { status?: OosStatus | "ALL"; lotId?: string; dateFrom?: Date; dateTo?: Date }): Promise<OosInvestigationSummary[]>;
+  assignOosLeadInvestigator(investigationId: string, leadUserId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  setOosRetestPending(investigationId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  clearOosRetestPending(investigationId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  closeOosInvestigation(investigationId: string, payload: { disposition: "APPROVED" | "REJECTED" | "RECALL"; dispositionReason: string; leadInvestigatorUserId: string; recallDetails?: { class: OosRecallClass; distributionScope: string; fdaNotificationDate?: Date; customerNotificationDate?: Date; recoveryTargetDate?: Date; affectedLotIds?: string[]; }; }, closedByUserId: string, signatureId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
+  markOosNoInvestigationNeeded(investigationId: string, reason: OosNoInvestigationReason, reasonNarrative: string, leadInvestigatorUserId: string, closedByUserId: string, signatureId: string, requestId: string, route: string, tx: Tx): Promise<OosInvestigation>;
 
   // Supplier Qualifications
   getSupplierQualifications(supplierId?: string): Promise<SupplierQualificationWithDetails[]>;

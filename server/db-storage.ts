@@ -2087,6 +2087,183 @@ export class DatabaseStorage implements IStorage {
     return rows;
   }
 
+  async assignOosLeadInvestigator(
+    investigationId: string,
+    leadUserId: string,
+    actingUserId: string,
+    requestId: string,
+    route: string,
+    tx: Tx,
+  ): Promise<schema.OosInvestigation> {
+    const [existing] = await tx.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, investigationId));
+    if (!existing) throw Object.assign(new Error("Investigation not found"), { status: 404 });
+    if (existing.leadInvestigatorUserId === leadUserId) return existing;
+    const [updated] = await tx
+      .update(schema.oosInvestigations)
+      .set({ leadInvestigatorUserId: leadUserId, updatedAt: new Date() })
+      .where(eq(schema.oosInvestigations.id, investigationId))
+      .returning();
+    await tx.insert(schema.auditTrail).values({
+      userId: actingUserId, action: "UPDATE", entityType: "oos_investigation", entityId: investigationId,
+      before: { leadInvestigatorUserId: existing.leadInvestigatorUserId },
+      after: { leadInvestigatorUserId: leadUserId },
+      meta: { subtype: "ASSIGN_LEAD_INVESTIGATOR" },
+      requestId, route,
+    });
+    return updated!;
+  }
+
+  async setOosRetestPending(investigationId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<schema.OosInvestigation> {
+    const [existing] = await tx.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, investigationId));
+    if (!existing) throw Object.assign(new Error("Investigation not found"), { status: 404 });
+    if (existing.status === "CLOSED") throw Object.assign(new Error("Investigation already closed"), { status: 409 });
+    if (existing.status === "RETEST_PENDING") return existing;
+    const [updated] = await tx
+      .update(schema.oosInvestigations)
+      .set({ status: "RETEST_PENDING", updatedAt: new Date() })
+      .where(eq(schema.oosInvestigations.id, investigationId))
+      .returning();
+    await tx.insert(schema.auditTrail).values({
+      userId: actingUserId, action: "UPDATE", entityType: "oos_investigation", entityId: investigationId,
+      before: { status: existing.status }, after: { status: "RETEST_PENDING" },
+      meta: { subtype: "RETEST_PENDING_SET" }, requestId, route,
+    });
+    return updated!;
+  }
+
+  async clearOosRetestPending(investigationId: string, actingUserId: string, requestId: string, route: string, tx: Tx): Promise<schema.OosInvestigation> {
+    const [existing] = await tx.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, investigationId));
+    if (!existing) throw Object.assign(new Error("Investigation not found"), { status: 404 });
+    if (existing.status === "CLOSED") throw Object.assign(new Error("Investigation already closed"), { status: 409 });
+    if (existing.status === "OPEN") return existing;
+    const [updated] = await tx
+      .update(schema.oosInvestigations)
+      .set({ status: "OPEN", updatedAt: new Date() })
+      .where(eq(schema.oosInvestigations.id, investigationId))
+      .returning();
+    await tx.insert(schema.auditTrail).values({
+      userId: actingUserId, action: "UPDATE", entityType: "oos_investigation", entityId: investigationId,
+      before: { status: existing.status }, after: { status: "OPEN" },
+      meta: { subtype: "RETEST_PENDING_CLEARED" }, requestId, route,
+    });
+    return updated!;
+  }
+
+  async closeOosInvestigation(
+    investigationId: string,
+    payload: {
+      disposition: "APPROVED" | "REJECTED" | "RECALL";
+      dispositionReason: string;
+      leadInvestigatorUserId: string;
+      recallDetails?: {
+        class: schema.OosRecallClass;
+        distributionScope: string;
+        fdaNotificationDate?: Date;
+        customerNotificationDate?: Date;
+        recoveryTargetDate?: Date;
+        affectedLotIds?: string[];
+      };
+    },
+    closedByUserId: string,
+    signatureId: string,
+    requestId: string,
+    route: string,
+    tx: Tx,
+  ): Promise<schema.OosInvestigation> {
+    const [existing] = await tx.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, investigationId));
+    if (!existing) throw Object.assign(new Error("Investigation not found"), { status: 404 });
+    if (existing.status === "CLOSED") throw Object.assign(new Error("Investigation already closed"), { status: 409 });
+    if (!payload.leadInvestigatorUserId) throw Object.assign(new Error("lead investigator required for closure"), { status: 422 });
+    if (!payload.dispositionReason) throw Object.assign(new Error("dispositionReason required"), { status: 422 });
+    if (payload.disposition === "RECALL" && !payload.recallDetails?.class) {
+      throw Object.assign(new Error("recallDetails.class required for RECALL disposition"), { status: 422 });
+    }
+    if (payload.disposition === "RECALL" && !payload.recallDetails?.distributionScope) {
+      throw Object.assign(new Error("recallDetails.distributionScope required for RECALL disposition"), { status: 422 });
+    }
+
+    const isoDate = (d?: Date) => d ? d.toISOString().slice(0, 10) : null;
+
+    const [updated] = await tx
+      .update(schema.oosInvestigations)
+      .set({
+        status: "CLOSED",
+        disposition: payload.disposition,
+        dispositionReason: payload.dispositionReason,
+        leadInvestigatorUserId: payload.leadInvestigatorUserId,
+        recallClass: payload.recallDetails?.class ?? null,
+        recallDistributionScope: payload.recallDetails?.distributionScope ?? null,
+        recallFdaNotificationDate: isoDate(payload.recallDetails?.fdaNotificationDate),
+        recallCustomerNotificationDate: isoDate(payload.recallDetails?.customerNotificationDate),
+        recallRecoveryTargetDate: isoDate(payload.recallDetails?.recoveryTargetDate),
+        recallAffectedLotIds: payload.recallDetails?.affectedLotIds ?? null,
+        closedByUserId,
+        closedAt: new Date(),
+        closureSignatureId: signatureId,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.oosInvestigations.id, investigationId))
+      .returning();
+
+    if (payload.disposition === "REJECTED") {
+      await tx
+        .update(schema.lots)
+        .set({ quarantineStatus: "REJECTED" })
+        .where(eq(schema.lots.id, existing.lotId));
+    }
+
+    await tx.insert(schema.auditTrail).values({
+      userId: closedByUserId, action: "OOS_CLOSED", entityType: "oos_investigation", entityId: investigationId,
+      before: { status: existing.status, disposition: existing.disposition },
+      after: { status: "CLOSED", disposition: payload.disposition, dispositionReason: payload.dispositionReason, closureSignatureId: signatureId },
+      requestId, route,
+    });
+
+    return updated!;
+  }
+
+  async markOosNoInvestigationNeeded(
+    investigationId: string,
+    reason: schema.OosNoInvestigationReason,
+    reasonNarrative: string,
+    leadInvestigatorUserId: string,
+    closedByUserId: string,
+    signatureId: string,
+    requestId: string,
+    route: string,
+    tx: Tx,
+  ): Promise<schema.OosInvestigation> {
+    const [existing] = await tx.select().from(schema.oosInvestigations).where(eq(schema.oosInvestigations.id, investigationId));
+    if (!existing) throw Object.assign(new Error("Investigation not found"), { status: 404 });
+    if (existing.status === "CLOSED") throw Object.assign(new Error("Investigation already closed"), { status: 409 });
+    if (!leadInvestigatorUserId) throw Object.assign(new Error("lead investigator required for closure"), { status: 422 });
+    if (!reasonNarrative) throw Object.assign(new Error("reasonNarrative required"), { status: 422 });
+
+    const [updated] = await tx
+      .update(schema.oosInvestigations)
+      .set({
+        status: "CLOSED",
+        disposition: "NO_INVESTIGATION_NEEDED",
+        dispositionReason: reasonNarrative,
+        noInvestigationReason: reason,
+        leadInvestigatorUserId,
+        closedByUserId,
+        closedAt: new Date(),
+        closureSignatureId: signatureId,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.oosInvestigations.id, investigationId))
+      .returning();
+
+    await tx.insert(schema.auditTrail).values({
+      userId: closedByUserId, action: "OOS_CLOSED", entityType: "oos_investigation", entityId: investigationId,
+      before: { status: existing.status }, after: { status: "CLOSED", disposition: "NO_INVESTIGATION_NEEDED", noInvestigationReason: reason },
+      requestId, route,
+    });
+
+    return updated!;
+  }
+
   // ─── Supplier Qualifications ─────────────────────────
 
   private async enrichSupplierQualification(sq: SupplierQualification): Promise<SupplierQualificationWithDetails> {
