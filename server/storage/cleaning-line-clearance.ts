@@ -1,6 +1,6 @@
 import { db } from "../db";
 import * as schema from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { storage } from "../storage";
 import { verifyPassword } from "../auth/password";
 import { MEANING_VERB } from "../signatures/signatures";
@@ -194,4 +194,199 @@ export async function listCleaningLogs(
 
 // ─── Line clearances (R-03 Task 7) ───────────────────────────────────────────
 //
-// Task 7 will append: createLineClearance, listLineClearances, findClearance.
+// Per-equipment line clearance for product changeover. The signing user
+// (request initiator) signs the record with an F-04 ceremony. Single-signer:
+// no second user needed (this is changeover sign-off, not dual verification).
+//
+// `productChangeToId` is required — this is the product about to run on the
+// equipment. `productChangeFromId` is OPTIONAL: a NULL "from" represents the
+// first batch on freshly qualified or freshly cleaned equipment with no prior
+// product to change away from.
+
+export interface CreateLineClearanceInput {
+  productChangeFromId?: string | null;
+  productChangeToId: string;
+  notes?: string;
+  signaturePassword: string;
+  commentary?: string;
+}
+
+export async function createLineClearance(
+  equipmentId: string,
+  signingUserId: string,
+  data: CreateLineClearanceInput,
+  requestId: string,
+  route: string,
+): Promise<schema.LineClearance> {
+  if (!data.productChangeToId) {
+    throw Object.assign(new Error("productChangeToId is required"), {
+      status: 400,
+      code: "PRODUCT_TO_REQUIRED",
+    });
+  }
+  if (!data.signaturePassword) {
+    throw Object.assign(
+      new Error("signaturePassword required to record line clearance"),
+      { status: 400, code: "SIGNATURE_REQUIRED" },
+    );
+  }
+
+  // Pre-flight: verify equipment exists. Outside transaction for fast-fail.
+  const [existing] = await db
+    .select()
+    .from(schema.equipment)
+    .where(eq(schema.equipment.id, equipmentId));
+  if (!existing) {
+    throw Object.assign(new Error("Equipment not found"), { status: 404 });
+  }
+
+  // Inlined F-04 ceremony — same shape as createCleaningLog above and the
+  // qualification/calibration ceremonies. We can't use performSignature
+  // because erp_line_clearances.signature_id is NOT NULL and performSignature
+  // inserts the signature row AFTER fn(tx) runs.
+  const fullUser = await storage.getUserByEmail(
+    await storage.getUserById(signingUserId).then((u) => {
+      if (!u) throw Object.assign(new Error("User not found"), { status: 404 });
+      return u.email;
+    }),
+  );
+  if (!fullUser) throw Object.assign(new Error("User not found"), { status: 404 });
+  if (fullUser.lockedUntil && fullUser.lockedUntil > new Date()) {
+    throw Object.assign(
+      new Error("Account temporarily locked due to too many failed attempts."),
+      { status: 423, code: "ACCOUNT_LOCKED" },
+    );
+  }
+  const valid = await verifyPassword(fullUser.passwordHash, data.signaturePassword);
+  if (!valid) {
+    await storage.recordFailedLogin(fullUser.id);
+    throw Object.assign(new Error("Password is incorrect."), {
+      status: 401,
+      code: "INVALID_PASSWORD",
+    });
+  }
+  await storage.recordSuccessfulLogin(fullUser.id);
+
+  const signedAt = new Date();
+  const titlePart = fullUser.title ? ` (${fullUser.title})` : "";
+  const fromProductId = data.productChangeFromId ?? null;
+  const toProductId = data.productChangeToId;
+  const manifestation = {
+    text: `I, ${fullUser.fullName}${titlePart}, hereby ${MEANING_VERB.LINE_CLEARANCE} this record on ${signedAt.toISOString()}.`,
+    fullName: fullUser.fullName,
+    title: fullUser.title ?? null,
+    meaning: "LINE_CLEARANCE" as const,
+    entityType: "equipment",
+    entityId: equipmentId,
+    signedAt: signedAt.toISOString(),
+    snapshot: {
+      productChangeFromId: fromProductId,
+      productChangeToId: toProductId,
+      notes: data.notes ?? null,
+    },
+  };
+
+  return await db.transaction(async (tx) => {
+    // 1. Signature row (must exist before line-clearance insert due to NOT NULL FK).
+    const [sigRow] = await tx
+      .insert(schema.electronicSignatures)
+      .values({
+        userId: fullUser.id,
+        meaning: "LINE_CLEARANCE",
+        entityType: "equipment",
+        entityId: equipmentId,
+        commentary: data.commentary ?? null,
+        fullNameAtSigning: fullUser.fullName,
+        titleAtSigning: fullUser.title ?? null,
+        requestId,
+        manifestationJson: manifestation as Record<string, unknown>,
+      })
+      .returning();
+
+    // 2. Line clearance row with signatureId set.
+    const [created] = await tx
+      .insert(schema.lineClearances)
+      .values({
+        equipmentId,
+        productChangeFromId: fromProductId,
+        productChangeToId: toProductId,
+        performedAt: signedAt,
+        performedByUserId: fullUser.id,
+        signatureId: sigRow!.id,
+        notes: data.notes ?? null,
+      })
+      .returning();
+
+    // 3. SIGN audit row (mirrors what performSignature would write).
+    await tx.insert(schema.auditTrail).values({
+      userId: fullUser.id,
+      action: "SIGN",
+      entityType: "equipment",
+      entityId: equipmentId,
+      before: null,
+      after: { lineClearanceId: created!.id },
+      route,
+      requestId,
+      meta: { signatureId: sigRow!.id, meaning: "LINE_CLEARANCE" },
+    });
+
+    // 4. Domain audit row.
+    await tx.insert(schema.auditTrail).values({
+      userId: signingUserId,
+      action: "LINE_CLEARANCE_LOGGED",
+      entityType: "equipment",
+      entityId: equipmentId,
+      after: {
+        lineClearanceId: created!.id,
+        fromProductId,
+        toProductId,
+        performedAt: signedAt.toISOString(),
+      },
+      requestId,
+      route,
+    });
+
+    return created!;
+  });
+}
+
+export async function listLineClearances(
+  equipmentId: string,
+): Promise<schema.LineClearance[]> {
+  return db
+    .select()
+    .from(schema.lineClearances)
+    .where(eq(schema.lineClearances.equipmentId, equipmentId))
+    .orderBy(desc(schema.lineClearances.performedAt))
+    .limit(100);
+}
+
+// findClearance — Task 8 imports this as a fixed-contract gate helper.
+// Returns the most recent line-clearance row for (equipmentId, productChangeToId)
+// whose performedAt is strictly greater than `after`, or null if none.
+//
+// Implementation: pull the 20 most recent matching rows, then filter in JS by
+// the runtime `after` cutoff. The 20-row cap is intentional (and sufficient,
+// because the gate is "did a clearance happen since X" — only the newest
+// matters; we just don't want to scan unbounded history).
+export async function findClearance(
+  equipmentId: string,
+  productChangeToId: string,
+  after: Date,
+): Promise<schema.LineClearance | null> {
+  const rows = await db
+    .select()
+    .from(schema.lineClearances)
+    .where(
+      and(
+        eq(schema.lineClearances.equipmentId, equipmentId),
+        eq(schema.lineClearances.productChangeToId, productChangeToId),
+      ),
+    )
+    .orderBy(desc(schema.lineClearances.performedAt))
+    .limit(20);
+  for (const row of rows) {
+    if (row.performedAt && row.performedAt > after) return row;
+  }
+  return null;
+}

@@ -1890,6 +1890,74 @@ export async function registerRoutes(
     },
   );
 
+  // ─── Equipment line clearances (R-03 Task 7: F-04 product changeover) ─
+  //
+  // Role gating: requireAuth only. The F-04 signature ceremony is the access
+  // control. Single-signer (the request initiator). Used by the BPR start
+  // gate (Task 8) via cleaningStorage.findClearance.
+
+  app.post<{ id: string }>(
+    "/api/equipment/:id/line-clearances",
+    requireAuth,
+    async (req, res, next) => {
+      try {
+        const body = req.body as {
+          productChangeFromId?: string | null;
+          productChangeToId?: string;
+          notes?: string;
+          signaturePassword?: string;
+          commentary?: string;
+        };
+        if (!body.productChangeToId || typeof body.productChangeToId !== "string") {
+          return res.status(400).json({
+            code: "PRODUCT_TO_REQUIRED",
+            message: "productChangeToId is required",
+          });
+        }
+        if (!body.signaturePassword) {
+          return res.status(400).json({
+            code: "SIGNATURE_REQUIRED",
+            message: "signaturePassword is required to record line clearance",
+          });
+        }
+        const clearance = await cleaningStorage.createLineClearance(
+          req.params.id,
+          req.user!.id,
+          {
+            productChangeFromId: body.productChangeFromId ?? null,
+            productChangeToId: body.productChangeToId,
+            notes: body.notes,
+            signaturePassword: body.signaturePassword,
+            commentary: body.commentary,
+          },
+          req.requestId,
+          `${req.method} ${req.path}`,
+        );
+        res.status(201).json(clearance);
+      } catch (err) {
+        const e = err as { status?: number; code?: string; message?: string };
+        if (e.status === 404) return res.status(404).json({ message: e.message ?? "Equipment not found" });
+        if (e.status === 423) return res.status(423).json({ error: { code: e.code, message: e.message } });
+        if (e.status === 401) return res.status(401).json({ error: { code: e.code, message: e.message } });
+        if (e.status === 400) return res.status(400).json({ code: e.code, message: e.message });
+        next(err);
+      }
+    },
+  );
+
+  app.get<{ id: string }>(
+    "/api/equipment/:id/line-clearances",
+    requireAuth,
+    async (req, res, next) => {
+      try {
+        const list = await cleaningStorage.listLineClearances(req.params.id);
+        res.json(list);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
   // ─── OOS investigations (T-08 §111.113 / §111.123 / SOP-QC-006) ───────
 
   const oosListQuerySchema = z.object({
