@@ -1662,7 +1662,7 @@ export async function registerRoutes(
           req.requestId,
           `${req.method} ${req.path}`,
         );
-        res.json(row);
+        res.status(201).json(row);
       } catch (err) {
         const e = err as { status?: number; code?: string; message?: string };
         if (e.status === 404) return res.status(404).json({ message: e.message ?? "Equipment not found" });
@@ -1712,7 +1712,7 @@ export async function registerRoutes(
           req.requestId,
           `${req.method} ${req.path}`,
         );
-        res.json(row);
+        res.status(201).json(row);
       } catch (err) {
         const e = err as { status?: number; message?: string };
         if (e.status === 404) return res.status(404).json({ message: e.message ?? "Equipment not found" });

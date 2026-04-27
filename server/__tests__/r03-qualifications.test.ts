@@ -161,7 +161,7 @@ describeIfDb("R-03 equipment qualifications", () => {
     expect(rows.length).toBe(0);
   });
 
-  it("POST /api/equipment/:id/qualifications — 200 for QA with valid signature: writes row + EQUIPMENT_QUALIFIED audit", async () => {
+  it("POST /api/equipment/:id/qualifications — 201 for QA with valid signature: writes row + EQUIPMENT_QUALIFIED audit", async () => {
     const equipId = await createEquipment("ok");
     const res = await request(app)
       .post(`/api/equipment/${equipId}/qualifications`)
@@ -176,7 +176,7 @@ describeIfDb("R-03 equipment qualifications", () => {
         signaturePassword: VALID_PASSWORD,
         commentary: "Initial qualification",
       });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = res.body as { id: string; type: string; status: string; signatureId: string | null };
     expect(body.type).toBe("IQ");
     expect(body.status).toBe("QUALIFIED");
@@ -206,7 +206,7 @@ describeIfDb("R-03 equipment qualifications", () => {
         validUntil: isoDate(355),
         signaturePassword: VALID_PASSWORD,
       });
-    expect(r1.status).toBe(200);
+    expect(r1.status).toBe(201);
     createdQualificationIds.push((r1.body as { id: string }).id);
 
     const r2 = await request(app)
@@ -219,7 +219,7 @@ describeIfDb("R-03 equipment qualifications", () => {
         validUntil: isoDate(364),
         signaturePassword: VALID_PASSWORD,
       });
-    expect(r2.status).toBe(200);
+    expect(r2.status).toBe(201);
     createdQualificationIds.push((r2.body as { id: string }).id);
 
     const list = await request(app)
@@ -278,7 +278,7 @@ describeIfDb("R-03 equipment qualifications", () => {
       .post(`/api/equipment/${equipId}/disqualify`)
       .set("x-test-user-id", qaId)
       .send({ type: "PQ", notes: "post-incident disqualify" });
-    expect(r4.status).toBe(200);
+    expect(r4.status).toBe(201);
     createdQualificationIds.push((r4.body as { id: string }).id);
 
     const active = await getActiveQualifiedTypes(equipId);
@@ -299,14 +299,14 @@ describeIfDb("R-03 equipment qualifications", () => {
         validUntil: isoDate(0), // today — inclusive boundary
         signaturePassword: VALID_PASSWORD,
       });
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(201);
     createdQualificationIds.push((r.body as { id: string }).id);
 
     const active = await getActiveQualifiedTypes(equipId);
     expect(active.has("PQ")).toBe(true);
   });
 
-  it("POST /api/equipment/:id/disqualify — 200 for QA, writes EXPIRED row + EQUIPMENT_DISQUALIFIED audit, no signature required", async () => {
+  it("POST /api/equipment/:id/disqualify — 201 for QA, writes EXPIRED row + EQUIPMENT_DISQUALIFIED audit, no signature required", async () => {
     const equipId = await createEquipment("disq");
     // First qualify
     const r1 = await request(app)
@@ -319,7 +319,7 @@ describeIfDb("R-03 equipment qualifications", () => {
         validUntil: isoDate(365),
         signaturePassword: VALID_PASSWORD,
       });
-    expect(r1.status).toBe(200);
+    expect(r1.status).toBe(201);
     createdQualificationIds.push((r1.body as { id: string }).id);
 
     // Disqualify
@@ -327,7 +327,7 @@ describeIfDb("R-03 equipment qualifications", () => {
       .post(`/api/equipment/${equipId}/disqualify`)
       .set("x-test-user-id", qaId)
       .send({ type: "IQ", notes: "Out-of-tolerance calibration" });
-    expect(r2.status).toBe(200);
+    expect(r2.status).toBe(201);
     const body = r2.body as { status: string; signatureId: string | null };
     expect(body.status).toBe("EXPIRED");
     expect(body.signatureId).toBeNull();

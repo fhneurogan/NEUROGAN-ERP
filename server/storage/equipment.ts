@@ -22,17 +22,29 @@ export async function createEquipment(
         { status: 409, code: "DUPLICATE_ASSET_TAG" },
       );
     }
-    const [created] = await tx.insert(schema.equipment).values(data).returning();
+    let created: schema.Equipment;
+    try {
+      const [row] = await tx.insert(schema.equipment).values(data).returning();
+      created = row!;
+    } catch (e: unknown) {
+      if ((e as { code?: string }).code === "23505") {
+        throw Object.assign(
+          new Error("Equipment with this assetTag already exists"),
+          { status: 409, code: "DUPLICATE_ASSET_TAG" },
+        );
+      }
+      throw e;
+    }
     await tx.insert(schema.auditTrail).values({
       userId,
       action: "EQUIPMENT_CREATED",
       entityType: "equipment",
-      entityId: created!.id,
-      after: { assetTag: created!.assetTag, name: created!.name },
+      entityId: created.id,
+      after: { assetTag: created.assetTag, name: created.name },
       requestId,
       route,
     });
-    return created!;
+    return created;
   });
 }
 
@@ -375,19 +387,28 @@ export async function createCalibrationSchedule(
     }
 
     const nextDueAt = new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
-    const [created] = await tx
-      .insert(schema.calibrationSchedules)
-      .values({ equipmentId, frequencyDays, nextDueAt })
-      .returning();
+    let created: schema.CalibrationSchedule;
+    try {
+      const [row] = await tx
+        .insert(schema.calibrationSchedules)
+        .values({ equipmentId, frequencyDays, nextDueAt })
+        .returning();
+      created = row!;
+    } catch (e: unknown) {
+      if ((e as { code?: string }).code === "23505") {
+        throw Object.assign(
+          new Error("Calibration schedule already exists for this equipment"),
+          { status: 409, code: "DUPLICATE_CALIBRATION_SCHEDULE" },
+        );
+      }
+      throw e;
+    }
 
-    // No CALIBRATION_SCHEDULE_CREATED audit action exists; reuse
-    // EQUIPMENT_CREATED for the schedule creation event (entityType
-    // distinguishes it from the equipment record).
     await tx.insert(schema.auditTrail).values({
       userId,
-      action: "EQUIPMENT_CREATED",
+      action: "CALIBRATION_SCHEDULE_CREATED",
       entityType: "calibration_schedule",
-      entityId: created!.id,
+      entityId: created.id,
       after: {
         equipmentId,
         frequencyDays,
@@ -397,7 +418,7 @@ export async function createCalibrationSchedule(
       route,
     });
 
-    return created!;
+    return created;
   });
 }
 
