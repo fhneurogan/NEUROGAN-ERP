@@ -3,14 +3,7 @@ import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 export async function createEquipment(
-  data: {
-    assetTag: string;
-    name: string;
-    model?: string;
-    serial?: string;
-    manufacturer?: string;
-    locationId?: string;
-  },
+  data: schema.InsertEquipmentDomain,
   userId: string,
   requestId: string,
   route: string,

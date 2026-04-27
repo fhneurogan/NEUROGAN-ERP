@@ -572,6 +572,19 @@ export const insertSupplierQualificationSchema = createInsertSchema(supplierQual
 export const insertBprSchema = createInsertSchema(batchProductionRecords).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertBprStepSchema = createInsertSchema(bprSteps).omit({ id: true, createdAt: true });
 export const insertBprDeviationSchema = createInsertSchema(bprDeviations).omit({ id: true, createdAt: true });
+export const insertEquipmentSchema = createInsertSchema(equipment, {
+  assetTag: z.string().min(1),
+  name: z.string().min(1),
+}).pick({
+  assetTag: true,
+  name: true,
+  model: true,
+  serial: true,
+  manufacturer: true,
+  locationId: true,
+});
+
+export type InsertEquipmentDomain = z.infer<typeof insertEquipmentSchema>;
 
 // Types
 export type Product = typeof products.$inferSelect;

@@ -21,6 +21,7 @@ import {
   insertBprDeviationSchema,
   insertLabSchema,
   insertLabTestResultSchema,
+  insertEquipmentSchema,
   userRoleEnum,
   userStatusEnum,
   type UserResponse,
@@ -1563,19 +1564,13 @@ export async function registerRoutes(
 
   app.post("/api/equipment", requireAuth, requireRole("ADMIN", "QA"), async (req, res, next) => {
     try {
-      const { assetTag, name, model, serial, manufacturer, locationId } = req.body as {
-        assetTag?: string;
-        name?: string;
-        model?: string;
-        serial?: string;
-        manufacturer?: string;
-        locationId?: string;
-      };
-      if (!assetTag || !name) {
-        return res.status(400).json({ message: "Missing required fields: assetTag, name" });
+      const parseResult = insertEquipmentSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid request body", details: parseResult.error.flatten() });
       }
+      const data = parseResult.data;
       const equip = await equipmentStorage.createEquipment(
-        { assetTag, name, model, serial, manufacturer, locationId },
+        data,
         req.user!.id,
         req.requestId,
         `${req.method} ${req.path}`,

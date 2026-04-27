@@ -157,4 +157,18 @@ describeIfDb("R-03 equipment master", () => {
       .where(eq(schema.auditTrail.entityId, equipId));
     expect(audit.some((a) => a.action === "EQUIPMENT_RETIRED")).toBe(true);
   });
+
+  it("GET /api/equipment/:id — 404 for unknown id", async () => {
+    const res = await request(app)
+      .get("/api/equipment/00000000-0000-0000-0000-000000000000")
+      .set("x-test-user-id", adminId);
+    expect(res.status).toBe(404);
+  });
+
+  it("PATCH /api/equipment/:id/retire — 404 for unknown id", async () => {
+    const res = await request(app)
+      .patch("/api/equipment/00000000-0000-0000-0000-000000000000/retire")
+      .set("x-test-user-id", qaId);
+    expect(res.status).toBe(404);
+  });
 });
