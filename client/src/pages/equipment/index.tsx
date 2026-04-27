@@ -73,7 +73,11 @@ const SUBTABS: { value: SubTab; label: string }[] = [
 const NO_LOCATION = "__none__";
 
 const createEquipmentSchema = z.object({
-  assetTag: z.string().trim().min(1, "Asset tag is required"),
+  assetTag: z
+    .string()
+    .trim()
+    .min(1, "Asset tag is required")
+    .transform((v) => v.toUpperCase()),
   name: z.string().trim().min(1, "Name is required"),
   model: z.string().trim().optional(),
   manufacturer: z.string().trim().optional(),
@@ -320,6 +324,7 @@ function CreateEquipmentDialog({
   const { toast } = useToast();
   const form = useForm<CreateEquipmentForm>({
     resolver: zodResolver(createEquipmentSchema),
+    mode: "onChange",
     defaultValues: {
       assetTag: "",
       name: "",
@@ -364,7 +369,21 @@ function CreateEquipmentDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          form.reset({
+            assetTag: "",
+            name: "",
+            model: "",
+            manufacturer: "",
+            locationId: NO_LOCATION,
+          });
+        }
+        onOpenChange(o);
+      }}
+    >
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>New Equipment</DialogTitle>
@@ -474,7 +493,7 @@ function CreateEquipmentDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || !form.formState.isValid}
                 data-testid="button-submit-equipment"
               >
                 {createMutation.isPending ? "Creating…" : "Create"}
