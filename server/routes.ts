@@ -1622,6 +1622,102 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Equipment qualifications (R-03 Task 4: IQ/OQ/PQ + F-04 signature) ─
+
+  app.post<{ id: string }>(
+    "/api/equipment/:id/qualifications",
+    requireAuth,
+    requireRole("ADMIN", "QA"),
+    async (req, res, next) => {
+      try {
+        const body = req.body as {
+          type?: "IQ" | "OQ" | "PQ";
+          status?: "PENDING" | "QUALIFIED" | "EXPIRED";
+          validFrom?: string;
+          validUntil?: string;
+          documentUrl?: string;
+          notes?: string;
+          signaturePassword?: string;
+          commentary?: string;
+        };
+        if (!body.type || !["IQ", "OQ", "PQ"].includes(body.type)) {
+          return res.status(400).json({ message: "type must be IQ, OQ, or PQ" });
+        }
+        if (!body.status || !["PENDING", "QUALIFIED", "EXPIRED"].includes(body.status)) {
+          return res.status(400).json({ message: "status must be PENDING, QUALIFIED, or EXPIRED" });
+        }
+        const row = await equipmentStorage.recordQualification(
+          req.params.id,
+          req.user!.id,
+          {
+            type: body.type,
+            status: body.status,
+            validFrom: body.validFrom,
+            validUntil: body.validUntil,
+            documentUrl: body.documentUrl,
+            notes: body.notes,
+            signaturePassword: body.signaturePassword,
+            commentary: body.commentary,
+          },
+          req.requestId,
+          `${req.method} ${req.path}`,
+        );
+        res.json(row);
+      } catch (err) {
+        const e = err as { status?: number; code?: string; message?: string };
+        if (e.status === 404) return res.status(404).json({ message: e.message ?? "Equipment not found" });
+        if (e.status === 400) return res.status(400).json({ code: e.code, message: e.message });
+        next(err);
+      }
+    },
+  );
+
+  app.get<{ id: string }>(
+    "/api/equipment/:id/qualifications",
+    requireAuth,
+    async (req, res, next) => {
+      try {
+        const list = await equipmentStorage.listQualifications(req.params.id);
+        res.json(list);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  app.post<{ id: string }>(
+    "/api/equipment/:id/disqualify",
+    requireAuth,
+    requireRole("ADMIN", "QA"),
+    async (req, res, next) => {
+      try {
+        const body = req.body as {
+          type?: "IQ" | "OQ" | "PQ";
+          notes?: string;
+        };
+        if (!body.type || !["IQ", "OQ", "PQ"].includes(body.type)) {
+          return res.status(400).json({ message: "type must be IQ, OQ, or PQ" });
+        }
+        const row = await equipmentStorage.recordQualification(
+          req.params.id,
+          req.user!.id,
+          {
+            type: body.type,
+            status: "EXPIRED",
+            notes: body.notes,
+          },
+          req.requestId,
+          `${req.method} ${req.path}`,
+        );
+        res.json(row);
+      } catch (err) {
+        const e = err as { status?: number; message?: string };
+        if (e.status === 404) return res.status(404).json({ message: e.message ?? "Equipment not found" });
+        next(err);
+      }
+    },
+  );
+
   // ─── OOS investigations (T-08 §111.113 / §111.123 / SOP-QC-006) ───────
 
   const oosListQuerySchema = z.object({
