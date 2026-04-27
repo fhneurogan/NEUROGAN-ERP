@@ -1718,6 +1718,98 @@ export async function registerRoutes(
     },
   );
 
+  // ─── Equipment calibration (R-03 Task 5) ──────────────────────────────
+
+  app.post<{ id: string }>(
+    "/api/equipment/:id/calibration-schedule",
+    requireAuth,
+    requireRole("ADMIN", "QA"),
+    async (req, res, next) => {
+      try {
+        const body = req.body as { frequencyDays?: number };
+        if (
+          body.frequencyDays === undefined ||
+          !Number.isInteger(body.frequencyDays) ||
+          body.frequencyDays <= 0
+        ) {
+          return res.status(400).json({ message: "frequencyDays must be a positive integer" });
+        }
+        const sched = await equipmentStorage.createCalibrationSchedule(
+          req.params.id,
+          body.frequencyDays,
+          req.user!.id,
+          req.requestId,
+          `${req.method} ${req.path}`,
+        );
+        res.status(201).json(sched);
+      } catch (err) {
+        const e = err as { status?: number; code?: string; message?: string };
+        if (e.status === 404) return res.status(404).json({ message: e.message ?? "Equipment not found" });
+        if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
+        next(err);
+      }
+    },
+  );
+
+  app.post<{ id: string }>(
+    "/api/equipment/:id/calibration",
+    requireAuth,
+    requireRole("ADMIN", "QA"),
+    async (req, res, next) => {
+      try {
+        const body = req.body as {
+          result?: "PASS" | "FAIL";
+          certUrl?: string;
+          notes?: string;
+          signaturePassword?: string;
+          commentary?: string;
+        };
+        if (!body.result || !["PASS", "FAIL"].includes(body.result)) {
+          return res.status(400).json({ message: "result must be PASS or FAIL" });
+        }
+        if (!body.signaturePassword) {
+          return res
+            .status(400)
+            .json({ code: "SIGNATURE_REQUIRED", message: "signaturePassword required to record calibration" });
+        }
+        const row = await equipmentStorage.recordCalibration(
+          req.params.id,
+          req.user!.id,
+          {
+            result: body.result,
+            certUrl: body.certUrl,
+            notes: body.notes,
+            signaturePassword: body.signaturePassword,
+            commentary: body.commentary,
+          },
+          req.requestId,
+          `${req.method} ${req.path}`,
+        );
+        res.status(201).json(row);
+      } catch (err) {
+        const e = err as { status?: number; code?: string; message?: string };
+        if (e.status === 404) return res.status(404).json({ message: e.message ?? "Equipment not found" });
+        if (e.status === 423) return res.status(423).json({ error: { code: e.code, message: e.message } });
+        if (e.status === 401) return res.status(401).json({ error: { code: e.code, message: e.message } });
+        if (e.status === 400) return res.status(400).json({ code: e.code, message: e.message });
+        next(err);
+      }
+    },
+  );
+
+  app.get<{ id: string }>(
+    "/api/equipment/:id/calibration",
+    requireAuth,
+    async (req, res, next) => {
+      try {
+        const status = await equipmentStorage.getCalibrationStatus(req.params.id);
+        res.json(status);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
   // ─── OOS investigations (T-08 §111.113 / §111.123 / SOP-QC-006) ───────
 
   const oosListQuerySchema = z.object({
