@@ -153,6 +153,7 @@ describeIfDb("R-03 equipment qualifications", () => {
         signaturePassword: "WrongPassword123!",
       });
     expect(res.status).toBe(401);
+    expect(res.body?.error?.code).toBe("UNAUTHENTICATED");
     const rows = await db
       .select()
       .from(schema.equipmentQualifications)
@@ -284,6 +285,25 @@ describeIfDb("R-03 equipment qualifications", () => {
     expect(active.has("IQ")).toBe(true);
     expect(active.has("OQ")).toBe(false);
     expect(active.has("PQ")).toBe(false);
+  });
+
+  it("getActiveQualifiedTypes — includes qualifications whose validUntil equals today (inclusive boundary)", async () => {
+    const equipId = await createEquipment("boundary");
+    const r = await request(app)
+      .post(`/api/equipment/${equipId}/qualifications`)
+      .set("x-test-user-id", qaId)
+      .send({
+        type: "PQ",
+        status: "QUALIFIED",
+        validFrom: isoDate(-30),
+        validUntil: isoDate(0), // today — inclusive boundary
+        signaturePassword: VALID_PASSWORD,
+      });
+    expect(r.status).toBe(200);
+    createdQualificationIds.push((r.body as { id: string }).id);
+
+    const active = await getActiveQualifiedTypes(equipId);
+    expect(active.has("PQ")).toBe(true);
   });
 
   it("POST /api/equipment/:id/disqualify — 200 for QA, writes EXPIRED row + EQUIPMENT_DISQUALIFIED audit, no signature required", async () => {

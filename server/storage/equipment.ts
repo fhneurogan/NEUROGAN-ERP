@@ -3,6 +3,7 @@ import * as schema from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { storage } from "../storage";
 import { verifyPassword } from "../auth/password";
+import { MEANING_VERB } from "../signatures/signatures";
 
 export async function createEquipment(
   data: schema.InsertEquipmentDomain,
@@ -140,6 +141,9 @@ export async function recordQualification(
   // inline the ceremony: verify password, then in a single transaction
   // insert signature → insert qualification (with signatureId already set)
   // → insert SIGN + EQUIPMENT_QUALIFIED audit rows.
+  //
+  // User-load dance mirrors performSignature() — keep in sync if that helper
+  // changes its user resolution.
   if (data.status === "QUALIFIED") {
     const fullUser = await storage.getUserByEmail(
       await storage.getUserById(userId).then((u) => {
@@ -167,7 +171,7 @@ export async function recordQualification(
     const signedAt = new Date();
     const titlePart = fullUser.title ? ` (${fullUser.title})` : "";
     const manifestation = {
-      text: `I, ${fullUser.fullName}${titlePart}, hereby qualified equipment for this record on ${signedAt.toISOString()}.`,
+      text: `I, ${fullUser.fullName}${titlePart}, hereby ${MEANING_VERB.EQUIPMENT_QUALIFIED} this record on ${signedAt.toISOString()}.`,
       fullName: fullUser.fullName,
       title: fullUser.title ?? null,
       meaning: "EQUIPMENT_QUALIFIED" as const,

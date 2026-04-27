@@ -30,7 +30,7 @@ export interface SignatureContext {
 }
 
 // Human-readable verb for each meaning, used in the manifestation text.
-const MEANING_VERB: Record<SignatureMeaning, string> = {
+export const MEANING_VERB: Record<SignatureMeaning, string> = {
   AUTHORED: "authored",
   REVIEWED: "reviewed",
   APPROVED: "approved",
