@@ -42,6 +42,9 @@ import { eq, and, desc, ne } from "drizzle-orm";
 import * as equipmentStorage from "./storage/equipment";
 import * as cleaningStorage from "./storage/cleaning-line-clearance";
 import * as artworkStorage from "./storage/label-artwork";
+import * as spoolStorage from "./storage/label-spools";
+import * as issuanceStorage from "./storage/label-issuance";
+import { getLabelPrintAdapter } from "./printing/registry";
 import { runCompletionGates, CompletionGateError } from "./state/bpr-completion-gates";
 
 function formatZodError(error: ZodError): string {
@@ -2411,6 +2414,167 @@ export async function registerRoutes(
     } catch (err) {
       const e = err as { status?: number; code?: string; message?: string };
       if (e.status === 404) return res.status(404).json({ message: "Label artwork not found" });
+      if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
+      if (e.status === 401) return res.status(401).json({ error: { code: e.code, message: e.message } });
+      if (e.status === 423) return res.status(423).json({ error: { code: e.code, message: e.message } });
+      next(err);
+    }
+  });
+
+  // ─── Label spools (R-04) ───────────────────────────────
+
+  // POST /api/label-spools — F-04, roles QA|ADMIN
+  app.post("/api/label-spools", requireAuth, requireRole("QA", "ADMIN"), async (req, res, next) => {
+    try {
+      const body = req.body as {
+        artworkId?: string;
+        spoolNumber?: string;
+        qtyInitial?: number;
+        locationId?: string | null;
+        password?: string;
+      };
+      if (!body.artworkId) return res.status(400).json({ message: "artworkId is required" });
+      if (!body.spoolNumber) return res.status(400).json({ message: "spoolNumber is required" });
+      if (body.qtyInitial == null) return res.status(400).json({ message: "qtyInitial is required" });
+      if (!body.password) return res.status(400).json({ message: "password is required" });
+      const row = await spoolStorage.receiveSpool(
+        {
+          artworkId: body.artworkId,
+          spoolNumber: body.spoolNumber,
+          qtyInitial: body.qtyInitial,
+          locationId: body.locationId ?? null,
+        },
+        req.user!.id,
+        body.password,
+        req.requestId,
+        `${req.method} ${req.path}`,
+      );
+      return res.status(201).json(row);
+    } catch (err) {
+      const e = err as { status?: number; code?: string; message?: string };
+      if (e.status === 404) return res.status(404).json({ message: "Label artwork not found" });
+      if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
+      if (e.status === 401) return res.status(401).json({ error: { code: e.code, message: e.message } });
+      if (e.status === 423) return res.status(423).json({ error: { code: e.code, message: e.message } });
+      next(err);
+    }
+  });
+
+  // GET /api/label-spools?artworkId=... — any auth
+  app.get("/api/label-spools", requireAuth, async (req, res, next) => {
+    try {
+      const { artworkId } = req.query as { artworkId?: string };
+      if (!artworkId) return res.status(400).json({ message: "artworkId query param is required" });
+      const rows = await spoolStorage.listActiveSpools(artworkId);
+      return res.json(rows);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/label-spools/:id/dispose — roles QA|ADMIN, no password
+  app.post<{ id: string }>("/api/label-spools/:id/dispose", requireAuth, requireRole("QA", "ADMIN"), async (req, res, next) => {
+    try {
+      const body = req.body as { reason?: string };
+      if (!body.reason) return res.status(400).json({ message: "reason is required" });
+      const row = await spoolStorage.disposeSpool(
+        req.params.id,
+        body.reason,
+        req.user!.id,
+        req.requestId,
+        `${req.method} ${req.path}`,
+      );
+      return res.json(row);
+    } catch (err) {
+      const e = err as { status?: number; code?: string; message?: string };
+      if (e.status === 404) return res.status(404).json({ message: "Label spool not found" });
+      if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
+      next(err);
+    }
+  });
+
+  // ─── Label issuance (R-04) ─────────────────────────────
+
+  // POST /api/bpr/:id/label-issuance — roles PRODUCTION|QA|ADMIN, no password
+  app.post<{ id: string }>("/api/bpr/:id/label-issuance", requireAuth, requireRole("PRODUCTION", "QA", "ADMIN"), async (req, res, next) => {
+    try {
+      const body = req.body as { spoolId?: string; qty?: number };
+      if (!body.spoolId) return res.status(400).json({ message: "spoolId is required" });
+      if (body.qty == null) return res.status(400).json({ message: "qty is required" });
+      const row = await issuanceStorage.issueLabels(
+        req.params.id,
+        body.spoolId,
+        body.qty,
+        req.user!.id,
+        req.requestId,
+        `${req.method} ${req.path}`,
+      );
+      return res.status(201).json(row);
+    } catch (err) {
+      const e = err as { status?: number; code?: string; message?: string };
+      if (e.status === 404) return res.status(404).json({ message: e.message ?? "Not found" });
+      if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
+      next(err);
+    }
+  });
+
+  // GET /api/bpr/:id/label-issuance — any auth
+  app.get<{ id: string }>("/api/bpr/:id/label-issuance", requireAuth, async (req, res, next) => {
+    try {
+      const rows = await issuanceStorage.listIssuanceForBpr(req.params.id);
+      return res.json(rows);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ─── Label print jobs (R-04) ───────────────────────────
+
+  // POST /api/label-issuance/:id/print — F-04, roles QA|ADMIN
+  app.post<{ id: string }>("/api/label-issuance/:id/print", requireAuth, requireRole("QA", "ADMIN"), async (req, res, next) => {
+    try {
+      const body = req.body as {
+        password?: string;
+        qty?: number;
+        lot?: string;
+        expiry?: string;
+        artworkId?: string;
+      };
+      if (!body.password) return res.status(400).json({ message: "password is required" });
+      if (body.qty == null) return res.status(400).json({ message: "qty is required" });
+      if (!body.lot) return res.status(400).json({ message: "lot is required" });
+      if (!body.expiry) return res.status(400).json({ message: "expiry is required" });
+      if (!body.artworkId) return res.status(400).json({ message: "artworkId is required" });
+
+      const adapter = await getLabelPrintAdapter();
+      const artwork = await artworkStorage.getArtwork(body.artworkId);
+      if (!artwork) return res.status(404).json({ message: "Label artwork not found" });
+
+      const adapterResult = await adapter.print({
+        artwork,
+        lot: body.lot,
+        expiry: new Date(body.expiry),
+        qty: body.qty,
+      });
+
+      const row = await issuanceStorage.recordPrintJob(
+        {
+          issuanceLogId: req.params.id,
+          lot: body.lot,
+          expiry: new Date(body.expiry),
+          qtyPrinted: adapterResult.qtyPrinted,
+          adapter: adapter.name,
+          adapterResult,
+        },
+        req.user!.id,
+        body.password,
+        req.requestId,
+        `${req.method} ${req.path}`,
+      );
+      return res.status(201).json(row);
+    } catch (err) {
+      const e = err as { status?: number; code?: string; message?: string };
+      if (e.status === 404) return res.status(404).json({ message: e.message ?? "Not found" });
       if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
       if (e.status === 401) return res.status(401).json({ error: { code: e.code, message: e.message } });
       if (e.status === 423) return res.status(423).json({ error: { code: e.code, message: e.message } });
