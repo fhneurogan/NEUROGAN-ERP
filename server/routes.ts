@@ -38,7 +38,7 @@ import { auditRouter } from "./audit/audit-routes";
 import { signatureRouter } from "./signatures/signature-routes";
 import { validationRouter } from "./validation/validation-routes";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import * as equipmentStorage from "./storage/equipment";
 import * as cleaningStorage from "./storage/cleaning-line-clearance";
 
@@ -325,6 +325,32 @@ export async function registerRoutes(
       res.json(product);
     } catch (err) {
       res.status(500).json({ message: "Failed to fetch product" });
+    }
+  });
+
+  // Default equipment list for a product, used to pre-fill the BPR Start
+  // modal (R-03 Task 15). Excludes RETIRED equipment so operators don't see
+  // decommissioned assets in the picker. Public-readable to mirror
+  // GET /api/products/:id (no auth) — returns only equipment master rows,
+  // no batch- or signature-related data.
+  app.get("/api/products/:id/equipment", async (req, res) => {
+    try {
+      const rows = await db
+        .select({ equipment: schema.equipment })
+        .from(schema.equipment)
+        .innerJoin(
+          schema.productEquipment,
+          eq(schema.productEquipment.equipmentId, schema.equipment.id),
+        )
+        .where(
+          and(
+            eq(schema.productEquipment.productId, req.params.id),
+            ne(schema.equipment.status, "RETIRED"),
+          ),
+        );
+      res.json(rows.map((r) => r.equipment));
+    } catch (err) {
+      res.status(500).json({ message: "Failed to fetch product equipment" });
     }
   });
 
