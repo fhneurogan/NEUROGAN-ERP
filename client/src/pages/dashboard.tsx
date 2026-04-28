@@ -253,7 +253,6 @@ export default function Dashboard() {
       }
     });
     return out.sort((a, b) => a.daysUntil - b.daysUntil);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeEquipment, calibrationQueries]);
 
   const qualificationsExpiring = useMemo(() => {
@@ -284,7 +283,6 @@ export default function Dashboard() {
       });
     });
     return out.sort((a, b) => a.daysUntil - b.daysUntil);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeEquipment, qualificationQueries]);
 
   if (isLoading) return <DashboardSkeleton />;
