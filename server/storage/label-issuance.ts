@@ -14,7 +14,7 @@
 //
 // sumIssuedForBpr  — Returns sum of quantity_issued for a BPR (used by Task 7).
 
-import { db, type Tx } from "../db";
+import { db } from "../db";
 import * as schema from "@shared/schema";
 import { eq, inArray, sum as dbSum } from "drizzle-orm";
 import { storage } from "../storage";

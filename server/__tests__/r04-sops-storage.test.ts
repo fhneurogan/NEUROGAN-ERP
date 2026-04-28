@@ -7,7 +7,6 @@ import {
   createSop,
   approveSop,
   retireSop,
-  getSop,
   getSopByCode,
   listSops,
 } from "../storage/sops";

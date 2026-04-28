@@ -1,6 +1,6 @@
 import { db } from "../db";
 import * as schema from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { LabelPrintAdapter } from "./adapter";
 import { StubAdapter } from "./stub-adapter";
 import { ZplOverTcpAdapter } from "./zpl-tcp-adapter";

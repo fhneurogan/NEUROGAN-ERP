@@ -3,7 +3,7 @@ import { StubAdapter } from "../stub-adapter";
 test("StubAdapter returns SUCCESS with provided qty", async () => {
   const adapter = new StubAdapter();
   const result = await adapter.print({
-    artwork: { id: "a", productId: "p", version: "v1", variableDataSpec: { lot: true, expiry: true } } as any,
+    artwork: { id: "a", productId: "p", version: "v1", variableDataSpec: { lot: true, expiry: true } } as unknown as import("@shared/schema").LabelArtwork,
     lot: "L001",
     expiry: new Date("2027-01-01"),
     qty: 100,

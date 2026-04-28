@@ -2543,7 +2543,7 @@ export async function registerRoutes(
       };
       if (!body.artworkId) return res.status(400).json({ message: "artworkId is required" });
       if (!body.spoolNumber) return res.status(400).json({ message: "spoolNumber is required" });
-      if (body.qtyInitial == null) return res.status(400).json({ message: "qtyInitial is required" });
+      if (body.qtyInitial === null || body.qtyInitial === undefined) return res.status(400).json({ message: "qtyInitial is required" });
       if (!body.password) return res.status(400).json({ message: "password is required" });
       const row = await spoolStorage.receiveSpool(
         {
@@ -2608,7 +2608,7 @@ export async function registerRoutes(
     try {
       const body = req.body as { spoolId?: string; qty?: number };
       if (!body.spoolId) return res.status(400).json({ message: "spoolId is required" });
-      if (body.qty == null) return res.status(400).json({ message: "qty is required" });
+      if (body.qty === null || body.qty === undefined) return res.status(400).json({ message: "qty is required" });
       const row = await issuanceStorage.issueLabels(
         req.params.id,
         body.spoolId,
@@ -2649,7 +2649,7 @@ export async function registerRoutes(
         artworkId?: string;
       };
       if (!body.password) return res.status(400).json({ message: "password is required" });
-      if (body.qty == null) return res.status(400).json({ message: "qty is required" });
+      if (body.qty === null || body.qty === undefined) return res.status(400).json({ message: "qty is required" });
       if (!body.lot) return res.status(400).json({ message: "lot is required" });
       if (!body.expiry) return res.status(400).json({ message: "expiry is required" });
       if (!body.artworkId) return res.status(400).json({ message: "artworkId is required" });
@@ -2705,9 +2705,9 @@ export async function registerRoutes(
         proofMimeType?: string | null;
       };
       if (!body.password) return res.status(400).json({ message: "password is required" });
-      if (body.qtyApplied == null) return res.status(400).json({ message: "qtyApplied is required" });
-      if (body.qtyReturned == null) return res.status(400).json({ message: "qtyReturned is required" });
-      if (body.qtyDestroyed == null) return res.status(400).json({ message: "qtyDestroyed is required" });
+      if (body.qtyApplied === null || body.qtyApplied === undefined) return res.status(400).json({ message: "qtyApplied is required" });
+      if (body.qtyReturned === null || body.qtyReturned === undefined) return res.status(400).json({ message: "qtyReturned is required" });
+      if (body.qtyDestroyed === null || body.qtyDestroyed === undefined) return res.status(400).json({ message: "qtyDestroyed is required" });
 
       const row = await reconciliationStorage.reconcileBpr(
         {

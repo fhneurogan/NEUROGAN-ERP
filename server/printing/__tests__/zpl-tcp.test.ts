@@ -12,7 +12,7 @@ test("sends ZPL to printer and returns SUCCESS on socket close", async () => {
 
   const adapter = new ZplOverTcpAdapter("127.0.0.1", port);
   const result = await adapter.print({
-    artwork: { variableDataSpec: { lot: true, expiry: true } } as any,
+    artwork: { variableDataSpec: { lot: true, expiry: true } } as unknown as import("@shared/schema").LabelArtwork,
     lot: "L001",
     expiry: new Date("2027-01-01"),
     qty: 5,
@@ -31,7 +31,7 @@ test("returns FAILED on connect timeout", async () => {
   // so the test runs fast. We just need a socket error, not a timeout.
   const adapter = new ZplOverTcpAdapter("127.0.0.1", 1); // port 1 should be refused
   const result = await adapter.print({
-    artwork: { variableDataSpec: {} } as any,
+    artwork: { variableDataSpec: {} } as unknown as import("@shared/schema").LabelArtwork,
     lot: "L001",
     expiry: new Date("2027-01-01"),
     qty: 5,
