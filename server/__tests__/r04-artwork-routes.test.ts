@@ -264,6 +264,23 @@ describeIfDb("R-04 label artwork routes", () => {
     expect((res.body as { approvedBySignatureId: string | null }).approvedBySignatureId).toBeTruthy();
   });
 
+  it("POST /api/label-artwork/:id/approve — 401 for wrong password", async () => {
+    const createRes = await request(app)
+      .post("/api/label-artwork")
+      .set("x-test-user-id", qaId)
+      .send(artworkBody(`approve-badpass-${Date.now()}`));
+    expect(createRes.status).toBe(201);
+    const artworkId = (createRes.body as { id: string }).id;
+    createdArtworkIds.push(artworkId);
+
+    const res = await request(app)
+      .post(`/api/label-artwork/${artworkId}/approve`)
+      .set("x-test-user-id", qaId)
+      .send({ password: "wrong-password-definitely" });
+    expect(res.status).toBe(401);
+    expect((res.body as { error: { code: string } }).error?.code).toBe("UNAUTHENTICATED");
+  });
+
   it("POST /api/label-artwork/:id/approve — 409 when already APPROVED (invalid state transition)", async () => {
     const createRes = await request(app)
       .post("/api/label-artwork")
@@ -335,6 +352,29 @@ describeIfDb("R-04 label artwork routes", () => {
       .send({ password: VALID_PASSWORD });
     expect(res.status).toBe(409);
     expect((res.body as { code: string }).code).toBe("ARTWORK_INVALID_STATE");
+  });
+
+  it("POST /api/label-artwork/:id/retire — 401 for wrong password", async () => {
+    const createRes = await request(app)
+      .post("/api/label-artwork")
+      .set("x-test-user-id", qaId)
+      .send(artworkBody(`retire-badpass-${Date.now()}`));
+    expect(createRes.status).toBe(201);
+    const artworkId = (createRes.body as { id: string }).id;
+    createdArtworkIds.push(artworkId);
+
+    // Approve first so retire can attempt
+    await request(app)
+      .post(`/api/label-artwork/${artworkId}/approve`)
+      .set("x-test-user-id", qaId)
+      .send({ password: VALID_PASSWORD });
+
+    const res = await request(app)
+      .post(`/api/label-artwork/${artworkId}/retire`)
+      .set("x-test-user-id", qaId)
+      .send({ password: "wrong-password-definitely" });
+    expect(res.status).toBe(401);
+    expect((res.body as { error: { code: string } }).error?.code).toBe("UNAUTHENTICATED");
   });
 
   it("POST /api/label-artwork/:id/retire — 200 APPROVED→RETIRED with valid password", async () => {

@@ -1424,7 +1424,7 @@ export async function registerRoutes(
       // allowing IN_PROGRESS → COMPLETE transition. Other status changes
       // (e.g. ON_HOLD → IN_PROGRESS) do NOT trigger this gate.
       const newStatus = data.status;
-      if (newStatus === "COMPLETE" || newStatus === "COMPLETED") {
+      if (newStatus === "COMPLETED") {
         await runCompletionGates(req.params.id);
       }
 
@@ -2387,11 +2387,11 @@ export async function registerRoutes(
       );
       res.json(row);
     } catch (err) {
-      const e = err as { status?: number; code?: string };
+      const e = err as { status?: number; code?: string; message?: string };
       if (e.status === 404) return res.status(404).json({ message: "Label artwork not found" });
-      if (e.status === 409) return res.status(409).json({ code: (e as any).code, message: (err as Error).message });
-      if (e.status === 401) return res.status(401).json({ code: (e as any).code, message: "Password is incorrect" });
-      if (e.status === 423) return res.status(423).json({ code: (e as any).code, message: (err as Error).message });
+      if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
+      if (e.status === 401) return res.status(401).json({ error: { code: e.code, message: e.message } });
+      if (e.status === 423) return res.status(423).json({ error: { code: e.code, message: e.message } });
       next(err);
     }
   });
@@ -2409,11 +2409,11 @@ export async function registerRoutes(
       );
       res.json(row);
     } catch (err) {
-      const e = err as { status?: number; code?: string };
+      const e = err as { status?: number; code?: string; message?: string };
       if (e.status === 404) return res.status(404).json({ message: "Label artwork not found" });
-      if (e.status === 409) return res.status(409).json({ code: (e as any).code, message: (err as Error).message });
-      if (e.status === 401) return res.status(401).json({ code: (e as any).code, message: "Password is incorrect" });
-      if (e.status === 423) return res.status(423).json({ code: (e as any).code, message: (err as Error).message });
+      if (e.status === 409) return res.status(409).json({ code: e.code, message: e.message });
+      if (e.status === 401) return res.status(401).json({ error: { code: e.code, message: e.message } });
+      if (e.status === 423) return res.status(423).json({ error: { code: e.code, message: e.message } });
       next(err);
     }
   });

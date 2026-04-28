@@ -53,8 +53,10 @@ export class CompletionGateError extends Error {
 // ─── Gates ───────────────────────────────────────────────────────────────────
 
 // Gate 1: A label reconciliation record must exist before a BPR can complete.
-async function requireReconciliation(bprId: string): Promise<void> {
-  const recon = await getReconciliationForBpr(bprId);
+function requireReconciliation(
+  bprId: string,
+  recon: Awaited<ReturnType<typeof getReconciliationForBpr>>,
+): void {
   if (!recon) {
     throw new CompletionGateError(
       "LABEL_RECONCILIATION_MISSING",
@@ -65,10 +67,10 @@ async function requireReconciliation(bprId: string): Promise<void> {
 }
 
 // Gate 2: If tolerance was exceeded, a deviation report must be linked.
-// Short-circuits to no-op when no reconciliation row exists (Gate 1 catches
-// that case); the explicit check keeps the gate logic self-contained.
-async function requireToleranceDeviationConsistency(bprId: string): Promise<void> {
-  const recon = await getReconciliationForBpr(bprId);
+function requireToleranceDeviationConsistency(
+  bprId: string,
+  recon: Awaited<ReturnType<typeof getReconciliationForBpr>>,
+): void {
   if (recon && recon.toleranceExceeded && !recon.deviationId) {
     throw new CompletionGateError(
       "LABEL_RECONCILIATION_OUT_OF_TOLERANCE_NO_DEVIATION",
@@ -81,8 +83,9 @@ async function requireToleranceDeviationConsistency(bprId: string): Promise<void
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
 // runCompletionGates runs all completion gates in order, throwing on the first
-// failure. Call this before allowing a BPR to transition to COMPLETE status.
+// failure. Call this before allowing a BPR to transition to COMPLETED status.
 export async function runCompletionGates(bprId: string): Promise<void> {
-  await requireReconciliation(bprId);
-  await requireToleranceDeviationConsistency(bprId);
+  const recon = await getReconciliationForBpr(bprId);
+  requireReconciliation(bprId, recon);
+  requireToleranceDeviationConsistency(bprId, recon);
 }
