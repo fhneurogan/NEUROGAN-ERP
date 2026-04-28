@@ -919,6 +919,17 @@ export const auditActionEnum = z.enum([
   "CLEANING_LOGGED",
   "LINE_CLEARANCE_LOGGED",
   "START_BLOCKED",
+  "LABEL_ARTWORK_CREATED",
+  "LABEL_ARTWORK_APPROVED",
+  "LABEL_ARTWORK_RETIRED",
+  "LABEL_SPOOL_RECEIVED",
+  "LABEL_SPOOL_DISPOSED",
+  "LABEL_ISSUED",
+  "LABEL_PRINTED",
+  "LABEL_RECONCILED",
+  "SOP_CREATED",
+  "SOP_APPROVED",
+  "SOP_RETIRED",
 ]);
 export type AuditAction = z.infer<typeof auditActionEnum>;
 
@@ -973,6 +984,13 @@ export const signatureMeaningEnum = z.enum([
   "CALIBRATION_RECORDED",
   "CLEANING_VERIFIED",
   "LINE_CLEARANCE",
+  "ARTWORK_APPROVED",
+  "ARTWORK_RETIRED",
+  "LABEL_SPOOL_RECEIVED",
+  "LABEL_PRINT_BATCH",
+  "LABEL_RECONCILED",
+  "SOP_APPROVED",
+  "SOP_RETIRED",
 ]);
 export type SignatureMeaning = z.infer<typeof signatureMeaningEnum>;
 
