@@ -73,35 +73,35 @@
     {
       "id": 86,
       "subject": "Task 11: API routes — reconciliation",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [82, 83],
       "description": "**Goal:** Reconciliation endpoints at BPR close.\n\n**Verify:** `pnpm test server/__tests__/r04-reconciliation-routes.test.ts -- --run`\n\n```json:metadata\n{\"files\":[\"server/routes.ts\",\"server/__tests__/r04-reconciliation-routes.test.ts\"],\"verifyCommand\":\"pnpm test server/__tests__/r04-reconciliation-routes.test.ts -- --run\",\"acceptanceCriteria\":[\"2 endpoints\",\"F-04 with proof upload (base64)\",\"All error codes covered\"]}\n```"
     },
     {
       "id": 87,
       "subject": "Task 12: API routes — SOPs",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [76, 77],
       "description": "**Goal:** SOP CRUD with QA approval ceremony + BPR step citation validation.\n\n**Verify:** `pnpm test server/__tests__/r04-sops-routes.test.ts -- --run`\n\n```json:metadata\n{\"files\":[\"server/routes.ts\",\"server/storage/sops.ts\",\"server/__tests__/r04-sops-routes.test.ts\"],\"verifyCommand\":\"pnpm test server/__tests__/r04-sops-routes.test.ts -- --run\",\"acceptanceCriteria\":[\"SOP CRUD with F-04 approve/retire\",\"BPR step validates approved sop_code\",\"SOP_NOT_APPROVED 409\"]}\n```"
     },
     {
       "id": 88,
       "subject": "Task 13: Frontend — Quality tab routing scaffold",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [84, 85, 86, 87],
       "description": "**Goal:** New top-level Quality nav entry; subtab structure with placeholders for future R-05/R-06.\n\n**Verify:** `pnpm tsc --noEmit && pnpm lint`\n\n```json:metadata\n{\"files\":[\"client/src/pages/quality/index.tsx\",\"client/src/pages/quality/labeling.tsx\",\"client/src/pages/quality/sops.tsx\",\"client/src/App.tsx\"],\"verifyCommand\":\"pnpm tsc --noEmit && pnpm lint\",\"acceptanceCriteria\":[\"/quality redirect\",\"5 subtabs with 3 disabled\",\"data-testid coverage\",\"Top nav entry\"]}\n```"
     },
     {
       "id": 89,
       "subject": "Task 14: Frontend — Labeling subtab",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [88],
       "description": "**Goal:** Three nested tabs under /quality/labeling: Artwork, Spools, Reconciliation queue.\n\n**Verify:** `pnpm tsc --noEmit && pnpm lint`\n\n```json:metadata\n{\"files\":[\"client/src/pages/quality/labeling.tsx\",\"client/src/pages/quality/labeling/artwork.tsx\",\"client/src/pages/quality/labeling/spools.tsx\",\"client/src/pages/quality/labeling/reconciliation-queue.tsx\",\"client/src/components/labeling/ArtworkCreateDialog.tsx\",\"client/src/components/labeling/SpoolReceiveDialog.tsx\",\"client/src/components/labeling/ApproveArtworkDialog.tsx\"],\"verifyCommand\":\"pnpm tsc --noEmit && pnpm lint\",\"acceptanceCriteria\":[\"3 nested tabs functional\",\"F-04 dialogs use SignatureDialog\",\"Base64 file upload\",\"data-testid\"]}\n```"
     },
     {
       "id": 90,
       "subject": "Task 15: Frontend — BPR detail integration",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [88],
       "description": "**Goal:** Three new sections on BPR detail for Issue + Print + Reconcile.\n\n**Verify:** `pnpm tsc --noEmit && pnpm lint`\n\n```json:metadata\n{\"files\":[\"client/src/pages/production.tsx\",\"client/src/components/labeling/IssueLabelsModal.tsx\",\"client/src/components/labeling/PrintLabelsModal.tsx\",\"client/src/components/labeling/ReconcileLabelsForm.tsx\"],\"verifyCommand\":\"pnpm tsc --noEmit && pnpm lint\",\"acceptanceCriteria\":[\"Issue modal operational (no F-04)\",\"Print modal F-04 + diagnostics toast\",\"Reconcile form with deviation picker on out-of-tolerance\",\"409 codes inline\"]}\n```"
     },
@@ -141,5 +141,5 @@
       "description": "**Goal:** Push branch, open PR against `FDA-EQMS-feature-package`.\n\n**Verify:** `gh pr view`\n\n```json:metadata\n{\"files\":[],\"verifyCommand\":\"gh pr view\",\"acceptanceCriteria\":[\"Branch pushed\",\"PR opened against FDA-EQMS-feature-package\",\"Body has summary + test plan\",\"CI green\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-27T23:20:00Z"
+  "lastUpdated": "2026-04-28T09:35:00Z"
 }
