@@ -42,6 +42,7 @@ import { eq, and, desc, ne } from "drizzle-orm";
 import * as equipmentStorage from "./storage/equipment";
 import * as cleaningStorage from "./storage/cleaning-line-clearance";
 import * as artworkStorage from "./storage/label-artwork";
+import { runCompletionGates, CompletionGateError } from "./state/bpr-completion-gates";
 
 function formatZodError(error: ZodError): string {
   return error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
@@ -1418,6 +1419,15 @@ export async function registerRoutes(
       const data = insertBprSchema.partial().parse(req.body);
       const before = await storage.getBpr(req.params.id);
       if (!before) return res.status(404).json({ message: "BPR not found" });
+
+      // Completion gate: enforce label reconciliation requirements before
+      // allowing IN_PROGRESS → COMPLETE transition. Other status changes
+      // (e.g. ON_HOLD → IN_PROGRESS) do NOT trigger this gate.
+      const newStatus = data.status;
+      if (newStatus === "COMPLETE" || newStatus === "COMPLETED") {
+        await runCompletionGates(req.params.id);
+      }
+
       const bpr = await withAudit(
         { userId: req.user!.id, action: "UPDATE", entityType: "batch_production_record",
           entityId: req.params.id, before,
@@ -1425,7 +1435,12 @@ export async function registerRoutes(
         (tx) => storage.updateBpr(req.params.id, data, tx),
       );
       res.json(bpr);
-    } catch (err) { next(err); }
+    } catch (err) {
+      if (CompletionGateError.is(err)) {
+        return res.status(409).json({ code: err.code, message: err.message });
+      }
+      next(err);
+    }
   });
 
   app.post<{ id: string }>("/api/batch-production-records/:id/submit-for-review", requireAuth, requireRole("PRODUCTION", "QA", "ADMIN"), async (req, res, next) => {
