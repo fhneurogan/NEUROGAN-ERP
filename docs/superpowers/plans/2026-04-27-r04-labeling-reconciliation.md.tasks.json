@@ -108,28 +108,28 @@
     {
       "id": 91,
       "subject": "Task 16: Frontend — SOPs subtab + BPR step citation",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [88],
       "description": "**Goal:** SOPs CRUD UI + dropdown picker on BPR step editor.\n\n**Verify:** `pnpm tsc --noEmit && pnpm lint`\n\n```json:metadata\n{\"files\":[\"client/src/pages/quality/sops.tsx\"],\"verifyCommand\":\"pnpm tsc --noEmit && pnpm lint\",\"acceptanceCriteria\":[\"SOPs CRUD with F-04\",\"Step editor dropdown + 409 inline\"]}\n```"
     },
     {
       "id": 92,
       "subject": "Task 17: Frontend — Dashboard cards",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [88],
       "description": "**Goal:** Two new dashboard cards mirroring R-03 patterns.\n\n**Verify:** `pnpm tsc --noEmit && pnpm lint`\n\n```json:metadata\n{\"files\":[\"client/src/pages/dashboard.tsx\"],\"verifyCommand\":\"pnpm tsc --noEmit && pnpm lint\",\"acceptanceCriteria\":[\"2 dashboard cards\",\"Empty states\",\"Deep-links\",\"data-testid\"]}\n```"
     },
     {
       "id": 93,
       "subject": "Task 18: Full integration suite + fixture updates",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [83, 89, 90, 91, 92],
       "description": "**Goal:** Full integration green; pre-existing BPR-completion tests get minimal R-04 fixtures.\n\n**Verify:** `pnpm test:integration`\n\n```json:metadata\n{\"files\":[\"server/__tests__/**/*.test.ts\"],\"verifyCommand\":\"pnpm test:integration\",\"acceptanceCriteria\":[\"Full suite green\",\"Pre-existing BPR tests patched with R-04 fixtures\"]}\n```"
     },
     {
       "id": 94,
       "subject": "Task 19: Validation scaffold updates",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [93],
       "description": "**Goal:** Append URS rows for R-04 + traceability matrix rows.\n\n```json:metadata\n{\"files\":[\"/Users/frederikhejlskov/Desktop/NEUROGAN/FDA/validation-scaffold.md\"],\"verifyCommand\":\"\",\"acceptanceCriteria\":[\"6 URS rows\",\"Traceability matrix rows\",\"VSR deferred to UI\"]}\n```"
     },
@@ -141,5 +141,5 @@
       "description": "**Goal:** Push branch, open PR against `FDA-EQMS-feature-package`.\n\n**Verify:** `gh pr view`\n\n```json:metadata\n{\"files\":[],\"verifyCommand\":\"gh pr view\",\"acceptanceCriteria\":[\"Branch pushed\",\"PR opened against FDA-EQMS-feature-package\",\"Body has summary + test plan\",\"CI green\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-28T09:35:00Z"
+  "lastUpdated": "2026-04-28T12:00:00Z"
 }
