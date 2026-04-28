@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { db } from "../db";
 import * as schema from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { hashPassword } from "../auth/password";
 import { createArtwork, approveArtwork } from "../storage/label-artwork";
 import { receiveSpool } from "../storage/label-spools";
@@ -35,6 +35,7 @@ const createdBprIds: string[] = [];
 const createdSpoolIds: string[] = [];
 const createdReconciliationIds: string[] = [];
 const createdIssuanceIds: string[] = [];
+const createdDeviationIds: string[] = [];
 
 async function makeBpr(sfx: string | number) {
   const [bpr] = await db
@@ -184,7 +185,12 @@ afterAll(async () => {
       .catch(() => {});
   }
 
-  // 3. BPRs
+  // 3. Deviations (FK → BPRs)
+  for (const id of createdDeviationIds) {
+    await db.delete(schema.bprDeviations).where(eq(schema.bprDeviations.id, id)).catch(() => {});
+  }
+
+  // 4. BPRs
   for (const id of createdBprIds) {
     await db
       .delete(schema.auditTrail)
@@ -196,7 +202,7 @@ afterAll(async () => {
       .catch(() => {});
   }
 
-  // 4. Spools
+  // 5. Spools
   for (const id of createdSpoolIds) {
     await db
       .update(schema.labelSpools)
@@ -374,6 +380,7 @@ describeIfDb("R-04 label reconciliation storage", () => {
         reportedBy: "R04Recon Admin",
       })
       .returning();
+    createdDeviationIds.push(deviation!.id);
 
     const input: ReconcileInput = {
       bprId: bpr3.id,
@@ -396,11 +403,6 @@ describeIfDb("R-04 label reconciliation storage", () => {
     expect(recon.deviationId).toBe(deviation!.id);
     expect(recon.signatureId).toBeTruthy();
 
-    // Cleanup deviation
-    await db
-      .delete(schema.bprDeviations)
-      .where(eq(schema.bprDeviations.id, deviation!.id))
-      .catch(() => {});
   });
 
   // ─── reconcileBpr — double reconcile → 409 ALREADY_RECONCILED ────────────

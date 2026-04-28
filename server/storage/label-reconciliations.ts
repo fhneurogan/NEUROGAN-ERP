@@ -170,7 +170,7 @@ export async function reconcileBpr(
       entityType: "label_reconciliation",
       entityId: reconId,
       before: null,
-      after: { reconId, bprId: input.bprId },
+      after: { reconciliationId: reconId, bprId: input.bprId },
       route,
       requestId,
       meta: { signatureId: sigRow!.id, meaning: "LABEL_RECONCILED" },
