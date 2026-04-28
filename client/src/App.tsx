@@ -187,6 +187,9 @@ function AppLayout() {
           <Route path="/oos-investigations" component={OosInvestigations} />
           <Route path="/quality" component={QualityPage} />
           <Route path="/quality/labeling" component={QualityPage} />
+          <Route path="/quality/labeling/artwork" component={QualityPage} />
+          <Route path="/quality/labeling/spools" component={QualityPage} />
+          <Route path="/quality/labeling/reconciliation" component={QualityPage} />
           <Route path="/quality/sops" component={QualityPage} />
           <Route path="/equipment" component={EquipmentPage} />
           <Route path="/equipment/master" component={EquipmentPage} />
