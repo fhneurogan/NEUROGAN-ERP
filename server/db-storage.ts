@@ -3449,7 +3449,30 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(schema.users, eq(schema.approvedMaterials.approvedByUserId, schema.users.id))
       .where(eq(schema.approvedMaterials.isActive, true))
       .orderBy(schema.products.name);
-    return rows as ApprovedMaterialWithDetails[];
+
+    // Attach the most recent COA for each product+supplier combination.
+    const result: ApprovedMaterialWithDetails[] = [];
+    for (const row of rows) {
+      const [coa] = await db
+        .select({
+          fileName: schema.coaDocuments.fileName,
+          fileData: schema.coaDocuments.fileData,
+          sourceType: schema.coaDocuments.sourceType,
+          overallResult: schema.coaDocuments.overallResult,
+          documentNumber: schema.coaDocuments.documentNumber,
+        })
+        .from(schema.coaDocuments)
+        .innerJoin(schema.receivingRecords, eq(schema.coaDocuments.receivingRecordId, schema.receivingRecords.id))
+        .innerJoin(schema.lots, eq(schema.receivingRecords.lotId, schema.lots.id))
+        .where(and(
+          eq(schema.lots.productId, row.productId),
+          eq(schema.receivingRecords.supplierId, row.supplierId),
+        ))
+        .orderBy(desc(schema.coaDocuments.createdAt))
+        .limit(1);
+      result.push({ ...row, latestCoa: coa ?? null } as ApprovedMaterialWithDetails);
+    }
+    return result;
   }
 
   async revokeApprovedMaterial(id: string): Promise<ApprovedMaterial | undefined> {

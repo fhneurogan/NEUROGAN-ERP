@@ -92,6 +92,13 @@ export interface ApprovedMaterialWithDetails {
   approvedAt: Date;
   notes: string | null;
   isActive: boolean;
+  latestCoa: {
+    fileName: string | null;
+    fileData: string | null;
+    sourceType: string | null;
+    overallResult: string | null;
+    documentNumber: string | null;
+  } | null;
 }
 
 
