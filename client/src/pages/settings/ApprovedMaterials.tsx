@@ -14,6 +14,13 @@ interface ApprovedMaterialEntry {
   approvedAt: string;
   notes: string | null;
   isActive: boolean;
+  latestCoa: {
+    fileName: string | null;
+    fileData: string | null;
+    sourceType: string | null;
+    overallResult: string | null;
+    documentNumber: string | null;
+  } | null;
 }
 
 export function ApprovedMaterialsSettings() {
@@ -59,6 +66,7 @@ export function ApprovedMaterialsSettings() {
               <TableHead>Supplier</TableHead>
               <TableHead>Approved by</TableHead>
               <TableHead>Date</TableHead>
+              <TableHead>COA</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -73,6 +81,20 @@ export function ApprovedMaterialsSettings() {
                 <TableCell className="text-sm">{item.approvedByName}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {new Date(item.approvedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {item.latestCoa?.fileData ? (
+                    <a
+                      href={`data:application/pdf;base64,${item.latestCoa.fileData}`}
+                      download={item.latestCoa.fileName ?? "coa.pdf"}
+                      className="text-primary hover:underline text-xs"
+                    >
+                      {item.latestCoa.fileName ?? "Download"}
+                      {item.latestCoa.overallResult ? ` · ${item.latestCoa.overallResult}` : ""}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <AlertDialog>
