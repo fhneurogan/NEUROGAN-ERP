@@ -878,8 +878,7 @@ export async function registerRoutes(
       const e = err as { status?: number; code?: string; message?: string; payload?: unknown };
       if (
         e.code === "EQUIPMENT_LIST_EMPTY" ||
-        e.code === "CALIBRATION_OVERDUE" ||
-        e.code === "LINE_CLEARANCE_MISSING"
+        e.code === "CALIBRATION_OVERDUE"
       ) {
         return res.status(409).json({ code: e.code, message: e.message, payload: e.payload });
       }
@@ -1304,22 +1303,6 @@ export async function registerRoutes(
           (tx) => storage.uploadCoaForReceivingRecord(req.params.id, { fileData, fileName, sourceType, overallResult, documentNumber }, tx),
         );
         res.status(201).json(doc);
-      } catch (err) { next(err); }
-    },
-  );
-
-  // WH-01: Confirm warehouse location move — transitions APPROVED_PENDING_MOVE → APPROVED
-  app.post(
-    "/api/receiving/:id/confirm-move",
-    requireAuth, requireRole("WAREHOUSE", "QA", "ADMIN"),
-    async (req, res, next) => {
-      try {
-        const { toLocationId, notes } = req.body as { toLocationId?: string; notes?: string };
-        if (!toLocationId) return res.status(400).json({ message: "toLocationId is required" });
-        await storage.confirmLocationMove(req.params.id as string, toLocationId, req.user!.id, notes);
-        const updated = await storage.getReceivingRecord(req.params.id as string);
-        if (!updated) return res.status(404).json({ message: "Not found" });
-        res.json(updated);
       } catch (err) { next(err); }
     },
   );
